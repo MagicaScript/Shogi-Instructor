@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import ShogiGame from './components/ShogiGame.vue'
+import YaneuraOuEngine from './components/YaneuraOuEngine.vue'
 
 const syncEnabled = ref(false)
+const currentSfen = ref('')
 
 function toggleSync() {
   syncEnabled.value = !syncEnabled.value
+}
+
+function handleSfenChange(next: string) {
+  currentSfen.value = next
 }
 </script>
 
@@ -23,56 +29,31 @@ function toggleSync() {
     </div>
   </header>
 
-  <main>
-    <ShogiGame :sync-enabled="syncEnabled" />
+  <main class="main">
+    <div class="left">
+      <ShogiGame :sync-enabled="syncEnabled" @sfen-change="handleSfenChange" />
+    </div>
+
+    <div class="right">
+      <YaneuraOuEngine :sfen="currentSfen" :depth="12" />
+    </div>
   </main>
 </template>
 
 <style scoped>
-.app-header {
-  text-align: center;
-  margin-bottom: 2rem;
-}
-
-h1 {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  color: #333;
-}
-
-.actions {
-  margin-top: 0.75rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.sync-btn {
-  border: 1px solid #ccc;
-  background: #fff;
-  padding: 8px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.sync-btn.active {
-  border-color: #666;
-}
-
-.sync-state {
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-    monospace;
-  font-size: 12px;
-  color: #666;
-}
-
-.sync-state.on {
-  color: #111;
-}
-
-main {
+/* keep your existing styles; add layout */
+.main {
   display: flex;
   justify-content: center;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.left {
+  flex: 0 0 auto;
+}
+
+.right {
+  flex: 1 1 auto;
 }
 </style>

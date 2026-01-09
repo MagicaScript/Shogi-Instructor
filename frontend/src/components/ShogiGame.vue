@@ -19,6 +19,13 @@
         @komadai-drag-end="handleKomadaiDragEnd"
       />
     </div>
+
+    <div v-if="syncEnabled && syncError" class="sync-overlay">
+      <div class="sync-overlay-card">
+        <div class="sync-title">Sync Error</div>
+        <div class="sync-error">{{ syncError }}</div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -60,6 +67,10 @@ type LishogiStateResponse = {
 const DEFAULT_SFEN = 'lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1'
 const LISHOGI_STATE_URL = 'http://127.0.0.1:3080/api/state'
 
+function isNonEmptyString(v: unknown): v is string {
+  return typeof v === 'string' && v.trim().length > 0
+}
+
 /**
  * ShogiGame Controller.
  * When sync is enabled, the game becomes read-only and follows the remote SFEN state.
@@ -70,6 +81,9 @@ export default defineComponent({
   props: {
     syncEnabled: { type: Boolean, default: false },
     syncIntervalMs: { type: Number, default: 1000 },
+  },
+  emits: {
+    'sfen-change': (sfen: string) => typeof sfen === 'string' && sfen.trim().length > 0,
   },
   data() {
     return {
@@ -108,6 +122,12 @@ export default defineComponent({
       board.clearSelection()
     },
 
+    emitCurrentSFEN() {
+      const exported = this.exportSFEN()
+      if (!isNonEmptyString(exported)) return
+      this.$emit('sfen-change', exported)
+    },
+
     applySFEN(sfen: string) {
       const board = this.getBoardRef()
       if (!board) return
@@ -130,6 +150,8 @@ export default defineComponent({
 
       const mn = this.extractMoveNumberFromSFEN(sfen)
       if (mn !== null) this.moveNumber = mn
+
+      this.emitCurrentSFEN()
     },
 
     extractMoveNumberFromSFEN(sfen: string): number | null {
@@ -191,6 +213,7 @@ export default defineComponent({
         const derivedMoveNumber = latest.ply + 1
         if (!this.extractMoveNumberFromSFEN(latest.sfen)) this.moveNumber = derivedMoveNumber
 
+        this.emitCurrentSFEN()
         this.syncError = ''
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
@@ -240,6 +263,7 @@ export default defineComponent({
       board.setCell(from, null)
       board.setCell(to, source)
       this.moveNumber++
+      this.emitCurrentSFEN()
     },
 
     handlePieceDrop(payload: PieceDropPayload) {
@@ -257,6 +281,7 @@ export default defineComponent({
       this.removeFromKomadai(payload.pieceType, payload.owner)
       board.setCell(payload.to, newPiece)
       this.moveNumber++
+      this.emitCurrentSFEN()
     },
 
     hasInKomadai(type: PieceType, owner: PlayerOwner): boolean {
