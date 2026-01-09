@@ -612,7 +612,7 @@ export class YaneuraOuEngine {
       if (typeof params.movetimeMs === 'number' && Number.isFinite(params.movetimeMs)) {
         this.post(`go movetime ${Math.max(0, Math.floor(params.movetimeMs))}`)
       } else {
-        const depth = params.depth ?? 12
+        const depth = params.depth ?? 18
         this.post(`go depth ${Math.max(1, Math.floor(depth))}`)
       }
 

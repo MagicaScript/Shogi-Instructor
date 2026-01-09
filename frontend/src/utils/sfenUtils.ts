@@ -3,7 +3,7 @@ import {
   type IShogiPiece,
   type PlayerOwner,
   type PieceType,
-} from '@/logic/ShogiPiece'
+} from '@/logic/shogiPiece'
 
 export interface KomadaiItem {
   label: string

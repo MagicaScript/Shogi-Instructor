@@ -2,9 +2,13 @@
 import { ref } from 'vue'
 import ShogiGame from './components/ShogiGame.vue'
 import YaneuraOuEngine from './components/YaneuraOuEngine.vue'
+import BotCoach from './components/BotCoach.vue'
+import type { EngineAnalysisPayload } from '@/schemes/engineAnalysis'
+import { isEngineAnalysisPayload } from '@/schemes/engineAnalysis'
 
 const syncEnabled = ref(false)
 const currentSfen = ref('')
+const engineAnalysis = ref<EngineAnalysisPayload | null>(null)
 
 function toggleSync() {
   syncEnabled.value = !syncEnabled.value
@@ -12,6 +16,11 @@ function toggleSync() {
 
 function handleSfenChange(next: string) {
   currentSfen.value = next
+}
+
+function handleEngineAnalysisUpdate(payload: EngineAnalysisPayload) {
+  if (!isEngineAnalysisPayload(payload)) return
+  engineAnalysis.value = payload
 }
 </script>
 
@@ -35,13 +44,17 @@ function handleSfenChange(next: string) {
     </div>
 
     <div class="right">
-      <YaneuraOuEngine :sfen="currentSfen" :depth="12" />
+      <YaneuraOuEngine
+        :sfen="currentSfen"
+        :depth="18"
+        @analysis-update="handleEngineAnalysisUpdate"
+      />
+      <BotCoach :analysis="engineAnalysis" />
     </div>
   </main>
 </template>
 
 <style scoped>
-/* keep your existing styles; add layout */
 .main {
   display: flex;
   justify-content: center;

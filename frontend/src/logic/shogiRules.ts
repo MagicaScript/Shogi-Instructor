@@ -1,4 +1,4 @@
-import type { IShogiPiece, PieceType, PlayerOwner } from '@/logic/ShogiPiece'
+import type { IShogiPiece, PieceType, PlayerOwner } from '@/logic/shogiPiece'
 
 const BOARD_SIZE = 9
 const BOARD_CELLS = 81

@@ -24,7 +24,7 @@
 <script lang="ts">
 import { defineComponent, type PropType } from 'vue'
 import ShogiPiece from './ShogiPiece.vue'
-import type { PlayerOwner, PieceType } from '@/logic/ShogiPiece'
+import type { PlayerOwner, PieceType } from '@/logic/shogiPiece'
 import type { KomadaiDragData } from './ShogiBoard.vue'
 
 export interface KomadaiPiece {

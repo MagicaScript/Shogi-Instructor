@@ -38,7 +38,7 @@ import {
   type IShogiPiece,
   type PlayerOwner,
   type PieceType,
-} from '@/logic/ShogiPiece'
+} from '@/logic/shogiPiece'
 import type { PieceMovePayload, PieceDropPayload } from './ShogiBoard.vue'
 import { parseSFEN, toSFEN, type KomadaiItem } from '@/utils/sfenUtils'
 import { calculateLegalMovesOnBoard, calculateLegalDrops } from '@/logic/shogiRules'

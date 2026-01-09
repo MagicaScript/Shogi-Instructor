@@ -1,115 +1,167 @@
-<script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { YaneuraOuEngine, type AnalyzeResult, type UsiInfo } from '@/logic/YaneuraOuEngine'
+<script lang="ts">
+import { defineComponent } from 'vue'
+import { YaneuraOuEngine, type AnalyzeResult, type UsiInfo } from '@/logic/yaneuraOuEngine'
+import type { EngineAnalysisPayload } from '@/schemes/engineAnalysis'
+import { isEngineAnalysisPayload } from '@/schemes/engineAnalysis'
+import { normalizeUsiScore } from '@/schemes/usi'
 
-type Props = {
-  sfen: string
-  depth?: number
-  movetimeMs?: number
+type EngineStatus = 'idle' | 'loading' | 'ready' | 'analyzing' | 'error'
+
+type Data = {
+  engine: YaneuraOuEngine
+  status: EngineStatus
+  errorMsg: string
+  result: AnalyzeResult | null
+  lastInfo: UsiInfo | null
+  logLines: string[]
+  cancelLogListener: (() => void) | null
+  lastSfenAnalyzed: string
+  cancelInfoTap: (() => void) | null
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  depth: 12,
-  movetimeMs: undefined,
-})
+export default defineComponent({
+  name: 'YaneuraOuEngineCard',
 
-const engine = new YaneuraOuEngine()
-
-const status = ref<'idle' | 'loading' | 'ready' | 'analyzing' | 'error'>('idle')
-const errorMsg = ref<string>('')
-
-const result = ref<AnalyzeResult | null>(null)
-const lastInfo = ref<UsiInfo | null>(null)
-const logLines = ref<string[]>([])
-
-const canAnalyze = computed(() => props.sfen.trim().length > 0 && status.value === 'ready')
-const prettyScore = computed(() => {
-  const info = lastInfo.value
-  if (!info?.score || info.score.type === 'none') return ''
-  if (info.score.type === 'cp') return `cp ${info.score.value}`
-  if (info.score.value === 'unknown') return 'mate ?'
-  return `mate ${info.score.value}`
-})
-
-let cancelLogListener: (() => void) | null = null
-let lastSfenAnalyzed = ''
-
-async function initEngine() {
-  status.value = 'loading'
-  errorMsg.value = ''
-  logLines.value = []
-  result.value = null
-  lastInfo.value = null
-
-  try {
-    cancelLogListener?.()
-    cancelLogListener = engine.onLine((line) => {
-      logLines.value.push(line)
-      if (logLines.value.length > 300) logLines.value.splice(0, logLines.value.length - 300)
-      const info = line.startsWith('info ') ? (null as unknown) : null
-      void info
-    })
-
-    await engine.init()
-    status.value = 'ready'
-  } catch (e: unknown) {
-    status.value = 'error'
-    errorMsg.value = e instanceof Error ? e.message : String(e)
-  }
-}
-
-async function runAnalysis(sfen: string) {
-  const trimmed = sfen.trim()
-  if (trimmed.length === 0) return
-  if (status.value !== 'ready') return
-  if (trimmed === lastSfenAnalyzed) return
-
-  status.value = 'analyzing'
-  errorMsg.value = ''
-  result.value = null
-  lastInfo.value = null
-  logLines.value = []
-
-  const off = engine.onLine((line) => {
-    if (line.startsWith('info ')) {
-      // Parse last-info cheaply: let engine TS parse in result as truth; here we only keep the last raw info line for UI continuity.
-      lastInfo.value = { raw: line }
-    }
-  })
-
-  try {
-    const r = await engine.analyze({
-      sfen: trimmed,
-      depth: props.depth,
-      movetimeMs: props.movetimeMs,
-    })
-    result.value = r
-    lastInfo.value = r.lastInfo ?? null
-    lastSfenAnalyzed = trimmed
-    status.value = 'ready'
-  } catch (e: unknown) {
-    status.value = 'error'
-    errorMsg.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    off()
-  }
-}
-
-watch(
-  () => props.sfen,
-  (next) => {
-    void runAnalysis(next)
+  props: {
+    sfen: { type: String, required: true },
+    depth: { type: Number, default: 18 },
+    movetimeMs: { type: Number, default: undefined },
   },
-)
 
-onMounted(() => {
-  void initEngine()
-})
+  emits: {
+    'analysis-update': (payload: EngineAnalysisPayload) => isEngineAnalysisPayload(payload),
+  },
 
-onBeforeUnmount(() => {
-  cancelLogListener?.()
-  cancelLogListener = null
-  void engine.dispose()
+  data(): Data {
+    return {
+      engine: new YaneuraOuEngine(),
+      status: 'idle',
+      errorMsg: '',
+      result: null,
+      lastInfo: null,
+      logLines: [],
+      cancelLogListener: null,
+      lastSfenAnalyzed: '',
+      cancelInfoTap: null,
+    }
+  },
+
+  computed: {
+    canAnalyze(): boolean {
+      return this.sfen.trim().length > 0 && this.status === 'ready'
+    },
+
+    prettyScore(): string {
+      const info = this.lastInfo
+      const score = info?.score
+      if (!score || score.type === 'none') return ''
+      if (score.type === 'cp') return `cp ${score.value}`
+      if (score.value === 'unknown') return 'mate ?'
+      return `mate ${score.value}`
+    },
+  },
+
+  watch: {
+    sfen: {
+      immediate: true,
+      handler(next: string) {
+        void this.runAnalysis(next)
+      },
+    },
+  },
+
+  mounted() {
+    void this.initEngine()
+  },
+
+  beforeUnmount() {
+    this.cancelInfoTap?.()
+    this.cancelInfoTap = null
+
+    this.cancelLogListener?.()
+    this.cancelLogListener = null
+
+    void this.engine.dispose()
+  },
+
+  methods: {
+    /** Keep log size bounded for UI and memory safety. */
+    pushLog(line: string) {
+      this.logLines.push(line)
+      if (this.logLines.length > 300) this.logLines.splice(0, this.logLines.length - 300)
+    },
+
+    async initEngine() {
+      this.status = 'loading'
+      this.errorMsg = ''
+      this.logLines = []
+      this.result = null
+      this.lastInfo = null
+      this.lastSfenAnalyzed = ''
+
+      try {
+        this.cancelLogListener?.()
+        this.cancelLogListener = this.engine.onLine((line: string) => {
+          this.pushLog(line)
+        })
+
+        await this.engine.init()
+        this.status = 'ready'
+      } catch (e: unknown) {
+        this.status = 'error'
+        this.errorMsg = e instanceof Error ? e.message : String(e)
+      }
+    },
+
+    async runAnalysis(sfen: string) {
+      const trimmed = sfen.trim()
+      if (trimmed.length === 0) return
+      if (this.status !== 'ready') return
+      if (trimmed === this.lastSfenAnalyzed) return
+
+      this.status = 'analyzing'
+      this.errorMsg = ''
+      this.result = null
+      this.lastInfo = null
+      this.logLines = []
+
+      this.cancelInfoTap?.()
+      this.cancelInfoTap = this.engine.onLine((line: string) => {
+        if (!line.startsWith('info ')) return
+        const rawInfo: UsiInfo = { raw: line }
+        this.lastInfo = rawInfo
+      })
+
+      try {
+        const r = await this.engine.analyze({
+          sfen: trimmed,
+          depth: this.depth,
+          movetimeMs: this.movetimeMs,
+        })
+
+        this.result = r
+        this.lastInfo = r.lastInfo ?? null
+        this.lastSfenAnalyzed = trimmed
+        this.status = 'ready'
+
+        const payload: EngineAnalysisPayload = {
+          sfen: trimmed,
+          bestmove: r.bestmove ?? null,
+          ponder: r.ponder ?? null,
+          score: normalizeUsiScore(r.lastInfo?.score),
+          pv: r.lastInfo?.pv ? [...r.lastInfo.pv] : [],
+        }
+
+        this.$emit('analysis-update', payload)
+      } catch (e: unknown) {
+        this.status = 'error'
+        this.errorMsg = e instanceof Error ? e.message : String(e)
+      } finally {
+        this.cancelInfoTap?.()
+        this.cancelInfoTap = null
+      }
+    },
+  },
 })
 </script>
 

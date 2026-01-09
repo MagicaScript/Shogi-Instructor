@@ -33,7 +33,7 @@
 <script lang="ts">
 import { defineComponent, shallowReactive, type PropType } from 'vue'
 import ShogiPieceComponent from './ShogiPiece.vue'
-import { type IShogiPiece, type PlayerOwner, type PieceType } from '@/logic/ShogiPiece'
+import { type IShogiPiece, type PlayerOwner, type PieceType } from '@/logic/shogiPiece'
 import { calculateLegalMovesOnBoard, calculateLegalDrops } from '@/logic/shogiRules'
 
 export interface BoardDragData {
