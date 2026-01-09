@@ -33,7 +33,7 @@ export default defineComponent({
 </script>
 
 <style scoped lang="scss">
-@import '@/styles/colors.scss';
+@use '@/styles/colors.scss' as *;
 
 .shogi-piece {
   width: 90%;

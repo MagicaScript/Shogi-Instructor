@@ -41,6 +41,17 @@ const SFEN_PIECE_MAP: Record<string, ParsedSfenPiece> = {
   '+R': { type: 'Rook', promoted: true },
 }
 
+const PIECE_TYPE_TO_SFEN: Record<PieceType, string> = {
+  Pawn: 'P',
+  Lance: 'L',
+  Knight: 'N',
+  Silver: 'S',
+  Gold: 'G',
+  King: 'K',
+  Bishop: 'B',
+  Rook: 'R',
+}
+
 const PIECE_LABEL_MAP: Record<PieceType, string> = {
   Pawn: '歩',
   Lance: '香',
@@ -60,7 +71,6 @@ function isDigitChar(ch: string): boolean {
   return code >= 48 && code <= 57
 }
 
-// noUncheckedIndexedAccess 下的“唯一正确姿势”：取字符必须断言
 function charAtOrThrow(str: string, idx: number, message: string): string {
   const ch = str[idx]
   if (ch === undefined) throw new Error(message)
@@ -73,8 +83,8 @@ function assertDefined<T>(value: T | undefined, message: string): T {
 }
 
 /**
- * Parse SFEN into game state.
- * SFEN: "<board> <turn> <hands> <moveNumber(optional)>"
+ * Parse SFEN string into game state.
+ * SFEN format: "<board> <turn> <hands> <moveNumber(optional)>"
  */
 export function parseSFEN(sfen: string): SfenParseResult {
   const parts = sfen.trim().split(/\s+/)
@@ -96,7 +106,6 @@ export function parseSFEN(sfen: string): SfenParseResult {
 
   const boardState = new Map<number, IShogiPiece>()
 
-  // 1) Parse board
   let cellIndex = 0
 
   for (let rowIdx = 0; rowIdx < BOARD_SIZE; rowIdx += 1) {
@@ -107,7 +116,6 @@ export function parseSFEN(sfen: string): SfenParseResult {
     while (i < row.length) {
       const ch = charAtOrThrow(row, i, `Unexpected end of row ${rowIdx + 1}`)
 
-      // empty squares: 1..9
       if (isDigitChar(ch)) {
         const empties = parseInt(ch, 10)
         if (!Number.isFinite(empties) || empties < 1 || empties > 9) {
@@ -120,7 +128,6 @@ export function parseSFEN(sfen: string): SfenParseResult {
         continue
       }
 
-      // piece token: ['+'] [letter]
       let promoted = false
       let pieceChar = ch
 
@@ -161,7 +168,6 @@ export function parseSFEN(sfen: string): SfenParseResult {
     throw new Error(`Invalid SFEN board cells: expected 81, got ${cellIndex}`)
   }
 
-  // 2) Parse hands
   const myKomadai: KomadaiItem[] = []
   const opponentKomadai: KomadaiItem[] = []
 
@@ -171,10 +177,8 @@ export function parseSFEN(sfen: string): SfenParseResult {
     while (i < handStr.length) {
       let count = 1
 
-      // 注意：这里不要直接 handStr[i]，统一 charAtOrThrow
       let ch = charAtOrThrow(handStr, i, 'Unexpected end in SFEN hands')
 
-      // count can be multi-digit
       if (isDigitChar(ch)) {
         let numStr = ''
         while (i < handStr.length) {
@@ -226,6 +230,87 @@ export function parseSFEN(sfen: string): SfenParseResult {
     myKomadai,
     opponentKomadai,
   }
+}
+
+/**
+ * Export game state to SFEN string.
+ */
+export function toSFEN(
+  cells: (IShogiPiece | null)[],
+  turn: PlayerOwner,
+  myKomadai: KomadaiItem[],
+  opponentKomadai: KomadaiItem[],
+  moveNumber: number = 1,
+): string {
+  const boardStr = buildBoardString(cells)
+  const turnStr = turn === 'self' ? 'b' : 'w'
+  const handStr = buildHandString(myKomadai, opponentKomadai)
+
+  return `${boardStr} ${turnStr} ${handStr} ${moveNumber}`
+}
+
+function buildBoardString(cells: (IShogiPiece | null)[]): string {
+  const rows: string[] = []
+
+  for (let rowIdx = 0; rowIdx < BOARD_SIZE; rowIdx++) {
+    let rowStr = ''
+    let emptyCount = 0
+
+    for (let colIdx = 0; colIdx < BOARD_SIZE; colIdx++) {
+      const cellIndex = rowIdx * BOARD_SIZE + colIdx
+      const piece = cells[cellIndex]
+
+      if (!piece) {
+        emptyCount++
+        continue
+      }
+
+      if (emptyCount > 0) {
+        rowStr += emptyCount.toString()
+        emptyCount = 0
+      }
+
+      rowStr += pieceToSfenChar(piece)
+    }
+
+    if (emptyCount > 0) {
+      rowStr += emptyCount.toString()
+    }
+
+    rows.push(rowStr)
+  }
+
+  return rows.join('/')
+}
+
+function pieceToSfenChar(piece: IShogiPiece): string {
+  const baseChar = PIECE_TYPE_TO_SFEN[piece.type]
+  const char = piece.owner === 'self' ? baseChar : baseChar.toLowerCase()
+  return piece.promoted ? `+${char}` : char
+}
+
+function buildHandString(myKomadai: KomadaiItem[], opponentKomadai: KomadaiItem[]): string {
+  const parts: string[] = []
+
+  const handOrder: PieceType[] = ['Rook', 'Bishop', 'Gold', 'Silver', 'Knight', 'Lance', 'Pawn']
+
+  for (const type of handOrder) {
+    const item = myKomadai.find((k) => k.type === type)
+    if (item && item.count > 0) {
+      const char = PIECE_TYPE_TO_SFEN[type]
+      parts.push(item.count > 1 ? `${item.count}${char}` : char)
+    }
+  }
+
+  for (const type of handOrder) {
+    const item = opponentKomadai.find((k) => k.type === type)
+    if (item && item.count > 0) {
+      const char = PIECE_TYPE_TO_SFEN[type].toLowerCase()
+      parts.push(item.count > 1 ? `${item.count}${char}` : char)
+    }
+  }
+
+  return parts.length > 0 ? parts.join('') : '-'
 }
 
 function addOrUpdateKomadai(list: KomadaiItem[], item: KomadaiItem): void {
