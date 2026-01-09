@@ -1,19 +1,29 @@
 <template>
   <div class="shogi-game-container">
-    <ShogiKomadai :pieces="opponentKomadai" :is-opponent="true" />
+    <ShogiKomadai
+      :pieces="opponentKomadai"
+      :is-opponent="true"
+      @komadai-drag-start="handleKomadaiDragStart"
+      @komadai-drag-end="handleKomadaiDragEnd"
+    />
 
     <div class="board-area">
       <ShogiBoard ref="boardRef" @piece-move="handlePieceMove" @piece-drop="handlePieceDrop" />
     </div>
 
-    <ShogiKomadai :pieces="myKomadai" :is-opponent="false" />
+    <ShogiKomadai
+      :pieces="myKomadai"
+      :is-opponent="false"
+      @komadai-drag-start="handleKomadaiDragStart"
+      @komadai-drag-end="handleKomadaiDragEnd"
+    />
   </div>
 </template>
 
 <script lang="ts">
 import { defineComponent } from 'vue'
 import ShogiBoard from './ShogiBoard.vue'
-import ShogiKomadai from './ShogiKomadai.vue'
+import ShogiKomadai, { type PieceSelectedPayload } from './ShogiKomadai.vue'
 import {
   ShogiPieceFactory,
   type IShogiPiece,
@@ -21,31 +31,29 @@ import {
   type PieceType,
 } from '@/logic/ShogiPiece'
 import type { PieceMovePayload, PieceDropPayload } from './ShogiBoard.vue'
-
-export interface KomadaiItem {
-  label: string
-  count: number
-  type: PieceType
-}
+import { parseSFEN, type KomadaiItem } from '@/utils/sfenUtils'
+import { calculateLegalMovesOnBoard, calculateLegalDrops } from '@/logic/shogiRules'
 
 interface ShogiBoardInstance {
   setCell: (index: number, piece: IShogiPiece | null) => void
   getCell: (index: number) => IShogiPiece | null
+  previewDropTargets: (pieceType: PieceType, owner: PlayerOwner) => void
+  clearSelection: () => void
   cells: (IShogiPiece | null)[]
 }
 
+const DEFAULT_SFEN = 'lnsgkgsnl/1r5b1/pppp+rpppp/4p4/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1'
+
 /**
  * ShogiGame Controller.
+ * Applies moves/drops with the same legality rules as the board highlight.
  */
 export default defineComponent({
   name: 'ShogiGame',
   components: { ShogiBoard, ShogiKomadai },
   data() {
     return {
-      myKomadai: [
-        { label: '歩', count: 0, type: 'Pawn' as PieceType },
-        { label: '金', count: 0, type: 'Gold' as PieceType },
-      ] as KomadaiItem[],
+      myKomadai: [] as KomadaiItem[],
       opponentKomadai: [] as KomadaiItem[],
     }
   },
@@ -61,39 +69,41 @@ export default defineComponent({
       const board = this.getBoardRef()
       if (!board) return
 
-      board.setCell(76, ShogiPieceFactory.create('Pawn', 'self'))
-      board.setCell(40, ShogiPieceFactory.create('King', 'self'))
-      board.setCell(4, ShogiPieceFactory.create('King', 'opponent'))
-      board.setCell(12, ShogiPieceFactory.create('Pawn', 'opponent'))
+      const { boardState, myKomadai, opponentKomadai } = parseSFEN(DEFAULT_SFEN)
+
+      for (let i = 0; i < 81; i++) board.setCell(i, null)
+      boardState.forEach((piece, index) => board.setCell(index, piece))
+
+      this.myKomadai = myKomadai
+      this.opponentKomadai = opponentKomadai
+    },
+
+    handleKomadaiDragStart(payload: PieceSelectedPayload) {
+      const board = this.getBoardRef()
+      if (!board) return
+      board.previewDropTargets(payload.piece.type, payload.owner)
+    },
+
+    handleKomadaiDragEnd() {
+      const board = this.getBoardRef()
+      if (!board) return
+      board.clearSelection()
     },
 
     handlePieceMove(payload: PieceMovePayload) {
       const board = this.getBoardRef()
       if (!board) return
 
-      const targetPiece = board.getCell(payload.to)
-      const sourcePiece = payload.piece
+      const source = board.getCell(payload.from)
+      if (!source) return
 
-      if (targetPiece && targetPiece.owner === sourcePiece.owner) return
+      const target = board.getCell(payload.to)
+      if (target && target.owner === source.owner) return
 
-      const matrix = sourcePiece.getMovementMatrix()
-      const colDiff = (payload.to % 9) - (payload.from % 9)
-      const rowDiff = Math.floor(payload.to / 9) - Math.floor(payload.from / 9)
+      const legal = calculateLegalMovesOnBoard(source, payload.from, board.cells)
+      if (!legal.includes(payload.to)) return
 
-      const matrixX = 2 + colDiff
-      const matrixY = 2 + rowDiff
-
-      if (matrixX >= 0 && matrixX < 5 && matrixY >= 0 && matrixY < 5) {
-        const row = matrix[matrixY]
-        if (row && row[matrixX] === 1) {
-          this.executeMove(board, payload.from, payload.to, targetPiece, sourcePiece)
-        } else {
-          console.log('Invalid move according to piece matrix.')
-        }
-      } else {
-        console.log('Move out of matrix range (needs sliding logic for long range).')
-        this.executeMove(board, payload.from, payload.to, targetPiece, sourcePiece)
-      }
+      this.executeMove(board, payload.from, payload.to, target, source)
     },
 
     executeMove(
@@ -103,9 +113,7 @@ export default defineComponent({
       target: IShogiPiece | null,
       source: IShogiPiece,
     ) {
-      if (target) {
-        this.capturePiece(target, source.owner)
-      }
+      if (target) this.capturePiece(target, source.owner)
       board.setCell(from, null)
       board.setCell(to, source)
     },
@@ -115,30 +123,46 @@ export default defineComponent({
       if (!board) return
 
       if (board.getCell(payload.to)) return
+      if (!this.hasInKomadai(payload.pieceType, payload.owner)) return
+
+      const legalDrops = calculateLegalDrops(payload.pieceType, payload.owner, board.cells)
+      if (!legalDrops.includes(payload.to)) return
 
       const newPiece = ShogiPieceFactory.create(payload.pieceType, payload.owner)
-
       this.removeFromKomadai(payload.pieceType, payload.owner)
       board.setCell(payload.to, newPiece)
     },
 
+    hasInKomadai(type: PieceType, owner: PlayerOwner): boolean {
+      const targetKomadai = owner === 'self' ? this.myKomadai : this.opponentKomadai
+      const item = targetKomadai.find((i) => i.type === type)
+      return !!item && item.count > 0
+    },
+
     capturePiece(piece: IShogiPiece, capturer: PlayerOwner) {
       const targetKomadai = capturer === 'self' ? this.myKomadai : this.opponentKomadai
-      const existingItem = targetKomadai.find((item) => item.label === piece.label)
+      const type = piece.type
 
-      if (existingItem) {
-        existingItem.count++
-      } else {
-        console.log(`Captured ${piece.label}! Value: ${piece.getValue()}`)
+      const existing = targetKomadai.find((item) => item.type === type)
+      if (existing) {
+        existing.count++
+        return
       }
+
+      // captured promoted piece becomes unpromoted in hand
+      const label = ShogiPieceFactory.create(type, capturer).label
+      targetKomadai.push({ label, count: 1, type })
     },
 
     removeFromKomadai(type: PieceType, owner: PlayerOwner) {
       const targetKomadai = owner === 'self' ? this.myKomadai : this.opponentKomadai
       const item = targetKomadai.find((i) => i.type === type)
+      if (!item) return
 
-      if (item && item.count > 0) {
-        item.count--
+      item.count = Math.max(0, item.count - 1)
+      if (item.count === 0) {
+        const idx = targetKomadai.indexOf(item)
+        if (idx >= 0) targetKomadai.splice(idx, 1)
       }
     },
   },

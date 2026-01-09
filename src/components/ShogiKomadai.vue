@@ -3,6 +3,7 @@
     <div class="komadai-header">
       {{ isOpponent ? 'Opponent' : 'You' }}
     </div>
+
     <div class="komadai-grid">
       <div
         v-for="piece in pieces"
@@ -10,6 +11,7 @@
         class="komadai-cell"
         draggable="true"
         @dragstart="onDragStart($event, piece)"
+        @dragend="onDragEnd"
         @click="selectPiece(piece)"
       >
         <ShogiPiece :label="piece.label" :is-opponent="isOpponent" />
@@ -52,7 +54,7 @@ export default defineComponent({
       default: false,
     },
   },
-  emits: ['piece-selected'],
+  emits: ['piece-selected', 'komadai-drag-start', 'komadai-drag-end'],
   computed: {
     currentOwner(): PlayerOwner {
       return this.isOpponent ? 'opponent' : 'self'
@@ -60,11 +62,10 @@ export default defineComponent({
   },
   methods: {
     selectPiece(piece: KomadaiPiece) {
-      const payload: PieceSelectedPayload = {
-        piece,
-        owner: this.currentOwner,
-      }
+      const payload: PieceSelectedPayload = { piece, owner: this.currentOwner }
       this.$emit('piece-selected', payload)
+      // also allow click-to-preview drop targets
+      this.$emit('komadai-drag-start', payload)
     },
 
     onDragStart(event: DragEvent, piece: KomadaiPiece) {
@@ -74,10 +75,17 @@ export default defineComponent({
 
       const dragData: KomadaiDragData = {
         type: 'DROP_FROM_KOMADAI',
-        piece: piece,
+        piece,
         owner: this.currentOwner,
       }
       event.dataTransfer.setData('application/json', JSON.stringify(dragData))
+
+      const payload: PieceSelectedPayload = { piece, owner: this.currentOwner }
+      this.$emit('komadai-drag-start', payload)
+    },
+
+    onDragEnd() {
+      this.$emit('komadai-drag-end')
     },
   },
 })
