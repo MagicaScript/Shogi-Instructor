@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import ShogiGame from './components/ShogiGame.vue'
 import YaneuraOuEngine from './components/YaneuraOuEngine.vue'
 import BotCoach from './components/BotCoach.vue'
+import SettingsPanel from './components/Settings.vue'
 import type { EngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import { isEngineAnalysisPayload } from '@/schemes/engineAnalysis'
 
@@ -44,11 +45,14 @@ function handleEngineAnalysisUpdate(payload: EngineAnalysisPayload) {
     </div>
 
     <div class="right">
+      <SettingsPanel />
+
       <YaneuraOuEngine
         :sfen="currentSfen"
         :depth="18"
         @analysis-update="handleEngineAnalysisUpdate"
       />
+
       <BotCoach :analysis="engineAnalysis" />
     </div>
   </main>
@@ -68,5 +72,7 @@ function handleEngineAnalysisUpdate(payload: EngineAnalysisPayload) {
 
 .right {
   flex: 1 1 auto;
+  display: grid;
+  gap: 12px;
 }
 </style>

@@ -3,6 +3,9 @@ import { defineComponent } from 'vue'
 import type { EngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import { isEngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import { BotCoach } from '@/logic/botCoach'
+import GeminiService from '@/components/GeminiService.vue'
+import { settingsStore, type CoachProfile, type SettingsState } from '@/schemes/settings'
+import type { GeminiCoachResponse } from '@/logic/geminiService'
 
 type Props = {
   analysis: EngineAnalysisPayload | null
@@ -13,14 +16,38 @@ type Data = {
   coach: BotCoach
   speech: string
   loadError: string
+  geminiError: string
+  geminiLoading: boolean
+  state: SettingsState
+  unsub: null | (() => void)
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null
+}
+
+function isGeminiCoachResponse(v: unknown): v is GeminiCoachResponse {
+  if (!isObject(v)) return false
+  return (
+    typeof v.text === 'string' &&
+    v.text.trim().length > 0 &&
+    typeof v.audioText === 'string' &&
+    v.audioText.trim().length > 0 &&
+    (v.emotion === 'happy' ||
+      v.emotion === 'neutral' ||
+      v.emotion === 'concerned' ||
+      v.emotion === 'excited')
+  )
 }
 
 export default defineComponent({
-  name: 'BotCoachCard',
+  name: 'BotCoach',
+
+  components: { GeminiService },
 
   props: {
     analysis: { type: Object as () => Props['analysis'], default: null },
-    avatarSrc: { type: String, default: '/bot-avatar.png' },
+    avatarSrc: { type: String, default: '' },
   },
 
   data(): Data {
@@ -28,6 +55,10 @@ export default defineComponent({
       coach: new BotCoach(),
       speech: 'Waiting for analysis...',
       loadError: '',
+      geminiError: '',
+      geminiLoading: false,
+      state: settingsStore.getState(),
+      unsub: null,
     }
   },
 
@@ -37,19 +68,40 @@ export default defineComponent({
       if (v === null) return null
       return isEngineAnalysisPayload(v) ? v : null
     },
+
+    selectedCoach(): CoachProfile | null {
+      return settingsStore.getCoachById(this.state.coachId)
+    },
+
+    coachAvatar(): string {
+      if (this.avatarSrc.trim().length > 0) return this.avatarSrc.trim()
+      return this.selectedCoach?.image ?? '/bot-avatar.png'
+    },
+
+    coachName(): string {
+      return this.selectedCoach?.name ?? 'Bot Coach'
+    },
   },
 
   watch: {
     safeAnalysis: {
       deep: true,
       handler() {
-        this.updateSpeech()
+        this.updateSpeechLocal()
       },
     },
   },
 
   mounted() {
-    void this.ensureInit().then(() => this.updateSpeech())
+    this.unsub = settingsStore.subscribe((s) => {
+      this.state = s
+    })
+
+    void this.ensureInit().then(() => this.updateSpeechLocal())
+  },
+
+  beforeUnmount() {
+    if (this.unsub) this.unsub()
   },
 
   methods: {
@@ -58,8 +110,22 @@ export default defineComponent({
       this.loadError = this.coach.getLoadError() ?? ''
     },
 
-    updateSpeech() {
+    updateSpeechLocal() {
       this.speech = this.coach.getPhrase(this.safeAnalysis)
+    },
+
+    onGeminiResult(out: GeminiCoachResponse) {
+      this.geminiError = ''
+      this.speech = out.text
+    },
+
+    onGeminiError(msg: string) {
+      this.geminiError = msg
+      this.updateSpeechLocal()
+    },
+
+    onGeminiLoading(v: boolean) {
+      this.geminiLoading = v
     },
   },
 })
@@ -69,10 +135,14 @@ export default defineComponent({
   <section class="coach-card">
     <header class="coach-header">
       <div class="coach-title">
-        <img class="avatar" :src="avatarSrc" alt="Bot avatar" />
+        <img class="avatar" :src="coachAvatar" alt="Coach avatar" />
         <div>
-          <h2>Bot Coach</h2>
+          <h2>{{ coachName }}</h2>
           <div v-if="loadError" class="error">{{ loadError }}</div>
+          <div v-else-if="geminiError" class="error">{{ geminiError }}</div>
+          <div v-else class="status" :class="{ on: geminiLoading }">
+            {{ geminiLoading ? 'Generating...' : 'Ready' }}
+          </div>
         </div>
       </div>
     </header>
@@ -83,6 +153,20 @@ export default defineComponent({
           {{ speech }}
         </div>
       </div>
+
+      <GeminiService
+        v-if="safeAnalysis && selectedCoach"
+        :analysis="safeAnalysis"
+        :coach-id="selectedCoach.id"
+        :coach-name="selectedCoach.name"
+        :coach-image="selectedCoach.image"
+        :coach-voice="selectedCoach.voice"
+        :coach-language="selectedCoach.language"
+        :personality-prompt="selectedCoach.personalityPrompt"
+        @result="onGeminiResult"
+        @error="onGeminiError"
+        @loading="onGeminiLoading"
+      />
 
       <div class="meta" v-if="safeAnalysis">
         <div class="row">
@@ -193,5 +277,15 @@ export default defineComponent({
   margin-top: 2px;
   font-size: 12px;
   color: #b00020;
+}
+
+.status {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #666;
+}
+
+.status.on {
+  color: #111;
 }
 </style>
