@@ -133,68 +133,6 @@ function lineHasToken(line: string, token: string): boolean {
   return parts.includes(token)
 }
 
-function parseUsiInfoLine(line: string): UsiInfo {
-  const info: UsiInfo = { raw: line }
-  const parts = line.trim().split(/\s+/)
-
-  let i = 1
-  while (i < parts.length) {
-    const key = parts[i++]
-    if (!key) break
-
-    switch (key) {
-      case 'depth':
-        info.depth = parseNumber(parts[i++])
-        break
-      case 'seldepth':
-        info.seldepth = parseNumber(parts[i++])
-        break
-      case 'time':
-        info.timeMs = parseNumber(parts[i++])
-        break
-      case 'nodes':
-        info.nodes = parseNumber(parts[i++])
-        break
-      case 'nps':
-        info.nps = parseNumber(parts[i++])
-        break
-      case 'hashfull':
-        info.hashfull = parseNumber(parts[i++])
-        break
-      case 'score': {
-        const t = parts[i++]
-        const v = parts[i++]
-
-        if (t === 'cp') {
-          const n = Number(v)
-          info.score = Number.isFinite(n) ? { type: 'cp', value: n } : { type: 'none' }
-        } else if (t === 'mate') {
-          if (v === '+' || v === '-') {
-            info.score = { type: 'mate', value: 'unknown' }
-          } else {
-            const n = Number(v)
-            info.score = Number.isFinite(n)
-              ? { type: 'mate', value: n }
-              : { type: 'mate', value: 'unknown' }
-          }
-        } else {
-          info.score = { type: 'none' }
-        }
-        break
-      }
-      case 'pv':
-        info.pv = parts.slice(i)
-        i = parts.length
-        break
-      default:
-        if (i < parts.length) i += 1
-        break
-    }
-  }
-
-  return info
-}
-
 function loadClassicScriptOnce(src: string): Promise<void> {
   const key = `classic:${src}`
   const cached = scriptLoadCache.get(key)
@@ -690,7 +628,7 @@ export class YaneuraOuEngine {
 
       const off = this.onLine((line) => {
         log.push(line)
-        if (line.startsWith('info ')) lastInfo = parseUsiInfoLine(line)
+        if (line.startsWith('info ')) lastInfo = this.parseUsiInfoLine(line)
 
         if (line.startsWith('bestmove ')) {
           done = true
@@ -761,5 +699,70 @@ export class YaneuraOuEngine {
       this.listeners.clear()
       this.recentLines = []
     }
+  }
+
+  private parseUsiInfoLine(line: string): UsiInfo {
+    const info: UsiInfo = { raw: line }
+    const parts = line.trim().split(/\s+/)
+
+    let i = 1
+    while (i < parts.length) {
+      const key = parts[i++]
+      if (!key) break
+
+      switch (key) {
+        case 'depth':
+          info.depth = parseNumber(parts[i++])
+          break
+        case 'seldepth':
+          info.seldepth = parseNumber(parts[i++])
+          break
+        case 'time':
+          info.timeMs = parseNumber(parts[i++])
+          break
+        case 'nodes':
+          info.nodes = parseNumber(parts[i++])
+          break
+        case 'nps':
+          info.nps = parseNumber(parts[i++])
+          break
+        case 'hashfull':
+          info.hashfull = parseNumber(parts[i++])
+          break
+        case 'score': {
+          const t = parts[i++]
+          const v = parts[i++]
+
+          if (t === 'cp') {
+            const n = Number(v)
+            info.score = Number.isFinite(n) ? { type: 'cp', value: n } : { type: 'none' }
+          } else if (t === 'mate') {
+            if (v === '+' || v === '-') {
+              info.score = { type: 'mate', value: 'unknown' }
+            } else {
+              const n = Number(v)
+              info.score = Number.isFinite(n)
+                ? { type: 'mate', value: n }
+                : { type: 'mate', value: 'unknown' }
+            }
+          } else {
+            info.score = { type: 'none' }
+          }
+          break
+        }
+        case 'pv':
+          if (i >= parts.length - (this.lastAppliedParams.MultiPV - 1)) {
+            break
+          }
+          info.pv = parts.slice(i)
+          i = parts.length
+          break
+        default:
+          if (i < parts.length) i += 1
+          break
+      }
+    }
+
+    return info
   }
 }
