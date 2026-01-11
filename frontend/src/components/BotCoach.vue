@@ -16,6 +16,17 @@ type Props = {
   gameInfo?: GameInfo | null
 }
 
+type HistoryItem = {
+  id: number
+  ts: number
+  source: 'player' | 'opponent'
+}
+
+type HistoryCell =
+  | { status: 'pending' }
+  | { status: 'done'; text: string }
+  | { status: 'error'; message: string }
+
 type Data = {
   coach: BotCoach
   loadError: string
@@ -29,6 +40,11 @@ type Data = {
   unsub: null | (() => void)
   playerMeta: EngineAnalysisPayload | null
   opponentMeta: EngineAnalysisPayload | null
+  historyOpen: boolean
+  history: HistoryItem[]
+  historyCells: Record<number, HistoryCell>
+  nextHistoryId: number
+  pendingHistoryId: Record<HistoryItem['source'], number | null>
 }
 
 export default defineComponent({
@@ -56,6 +72,11 @@ export default defineComponent({
       unsub: null,
       playerMeta: null,
       opponentMeta: null,
+      historyOpen: false,
+      history: [],
+      historyCells: {},
+      nextHistoryId: 1,
+      pendingHistoryId: { player: null, opponent: null },
     }
   },
 
@@ -140,6 +161,90 @@ export default defineComponent({
       return t.length === 0 || t.startsWith('waiting for')
     },
 
+    getHistoryListEl(): HTMLElement | null {
+      const el = this.$refs.historyList
+      return el instanceof HTMLElement ? el : null
+    },
+
+    scrollHistoryToBottom() {
+      if (!this.historyOpen) return
+      const el = this.getHistoryListEl()
+      if (!el) return
+      el.scrollTop = el.scrollHeight
+    },
+
+    createPendingHistory(source: HistoryItem['source']): number {
+      const existing = this.pendingHistoryId[source]
+      if (existing) return existing
+
+      const id = this.nextHistoryId++
+      const item: HistoryItem = { id, ts: Date.now(), source }
+
+      this.history.push(item)
+      this.historyCells[id] = { status: 'pending' }
+      this.pendingHistoryId[source] = id
+
+      if (this.history.length > 100) {
+        const removed = this.history.splice(0, this.history.length - 100)
+        for (const r of removed) delete this.historyCells[r.id]
+      }
+
+      void this.$nextTick(() => this.scrollHistoryToBottom())
+      return id
+    },
+
+    resolvePendingHistory(source: HistoryItem['source'], text: string) {
+      const cleaned = text.trim()
+      if (cleaned.length === 0) return
+      if (this.isPlaceholderSpeech(cleaned)) return
+
+      const id =
+        this.pendingHistoryId[source] ??
+        [...this.history].reverse().find((h) => h.source === source && h.id in this.historyCells)
+          ?.id ??
+        null
+      if (!id) return
+
+      this.historyCells[id] = { status: 'done', text: cleaned }
+      this.pendingHistoryId[source] = null
+      void this.$nextTick(() => this.scrollHistoryToBottom())
+    },
+
+    failPendingHistory(source: HistoryItem['source'], message: string) {
+      const cleaned = message.trim()
+      if (cleaned.length === 0) return
+
+      const id = this.pendingHistoryId[source]
+      if (!id) return
+
+      this.historyCells[id] = { status: 'error', message: cleaned }
+      this.pendingHistoryId[source] = null
+    },
+
+    clearHistory() {
+      this.history = []
+      this.historyCells = {}
+      this.nextHistoryId = 1
+      this.pendingHistoryId = { player: null, opponent: null }
+    },
+
+    toggleHistory() {
+      this.historyOpen = !this.historyOpen
+      void this.$nextTick(() => this.scrollHistoryToBottom())
+    },
+
+    historyStatus(id: number): HistoryCell['status'] {
+      const cell = this.historyCells[id]
+      return cell?.status ?? 'pending'
+    },
+
+    historyText(id: number): string {
+      const cell = this.historyCells[id]
+      if (!cell || cell.status === 'pending') return 'Generating...'
+      if (cell.status === 'done') return cell.text
+      return `Error: ${cell.message}`
+    },
+
     async ensureInit() {
       await this.coach.init()
       this.loadError = this.coach.getLoadError() ?? ''
@@ -175,29 +280,35 @@ export default defineComponent({
     onPlayerGeminiResult(out: GeminiCoachResponse) {
       this.playerGeminiError = ''
       this.playerSpeech = out.text
+      this.resolvePendingHistory('player', out.text)
     },
 
     onOpponentGeminiResult(out: GeminiCoachResponse) {
       this.opponentGeminiError = ''
       this.opponentSpeech = out.text
+      this.resolvePendingHistory('opponent', out.text)
     },
 
     onPlayerGeminiError(msg: string) {
       this.playerGeminiError = msg
+      this.failPendingHistory('player', msg)
       if (this.playerMeta) this.playerSpeech = this.coach.getPhrase(this.playerMeta)
     },
 
     onOpponentGeminiError(msg: string) {
       this.opponentGeminiError = msg
+      this.failPendingHistory('opponent', msg)
       if (this.opponentMeta) this.opponentSpeech = this.coach.getPhrase(this.opponentMeta)
     },
 
     onPlayerGeminiLoading(v: boolean) {
       this.playerGeminiLoading = v
+      if (v) this.createPendingHistory('player')
     },
 
     onOpponentGeminiLoading(v: boolean) {
       this.opponentGeminiLoading = v
+      if (v) this.createPendingHistory('opponent')
     },
   },
 })
@@ -229,6 +340,31 @@ export default defineComponent({
         <div class="speech-title">After Opponent move</div>
         <div v-if="opponentGeminiError" class="error">{{ opponentGeminiError }}</div>
         <div class="speech mono">{{ opponentSpeech }}</div>
+      </div>
+
+      <div class="history-card">
+        <div class="history-header">
+          <button class="history-toggle" type="button" @click="toggleHistory">
+            {{ historyOpen ? 'Hide' : 'Show' }} history ({{ history.length }}/100)
+          </button>
+          <button
+            class="history-clear"
+            type="button"
+            @click="clearHistory"
+            :disabled="history.length === 0"
+          >
+            Clear
+          </button>
+        </div>
+
+        <div v-if="historyOpen" ref="historyList" class="history-list mono">
+          <div v-for="h in history" :key="h.id" class="history-item">
+            <span class="history-role">{{ h.source === 'player' ? 'Player' : 'Opponent' }}:</span>
+            <span class="history-text" :class="{ pending: historyStatus(h.id) === 'pending' }">
+              {{ historyText(h.id) }}
+            </span>
+          </div>
+        </div>
       </div>
 
       <GeminiService
@@ -362,6 +498,83 @@ export default defineComponent({
   border-radius: 12px;
   background: #fafafa;
   padding: 10px 12px;
+}
+
+.history-card {
+  border: 1px solid #eee;
+  border-radius: 12px;
+  background: #fafafa;
+  padding: 10px 12px;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.history-toggle {
+  appearance: none;
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.history-clear {
+  appearance: none;
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.history-clear:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.history-list {
+  margin-top: 10px;
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid #eee;
+  background: #fff;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.history-item {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px dashed #eee;
+}
+
+.history-item:last-child {
+  border-bottom: 0;
+}
+
+.history-role {
+  color: #666;
+  font-size: 12px;
+  padding-top: 1px;
+}
+
+.history-text {
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.history-text.pending {
+  color: #777;
 }
 
 .speech-title {

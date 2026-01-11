@@ -62,7 +62,7 @@ function handleEngineAnalysisUpdate(payload: EngineAnalysisPayload) {
 
       <YaneuraOuEngine
         :sfen="currentSfen"
-        :depth="18"
+        :depth="14"
         @analysis-update="handleEngineAnalysisUpdate"
       />
 

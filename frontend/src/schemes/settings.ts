@@ -38,7 +38,7 @@ const DEFAULT_COACHES: readonly CoachProfile[] = [
   {
     id: 'calm-sensei',
     name: 'Calm Sensei',
-    image: '/coaches/calm.png',
+    image: '/assets/calm-sensei.jpg',
     voice: 'neutral_male_1',
     language: 'English',
     personalityPrompt:
@@ -47,7 +47,7 @@ const DEFAULT_COACHES: readonly CoachProfile[] = [
   {
     id: 'tactical-trainer',
     name: 'Tactical Trainer',
-    image: '/coaches/tactical.png',
+    image: '/assets/tactical-trainer.jpg',
     voice: 'energetic_male_1',
     language: 'English',
     personalityPrompt:
@@ -56,11 +56,20 @@ const DEFAULT_COACHES: readonly CoachProfile[] = [
   {
     id: 'kind-mentor',
     name: 'Kind Mentor',
-    image: '/coaches/kind.png',
+    image: '/assets/kind-mentor.jpg',
     voice: 'soft_female_1',
     language: 'English',
     personalityPrompt:
       'You are warm and encouraging. You focus on fundamentals, safety, and small improvements each move.',
+  },
+  {
+    id: 'sora-chan',
+    name: 'Sora chan',
+    image: '/assets/sora-chan.jpg',
+    voice: 'Zephyr',
+    language: 'English',
+    personalityPrompt:
+      "You are Sora-chan! A magical girl Shogi prodigy from an anime. You use magical metaphors like 'Spirit Check!', 'Mana Barrier!', 'Dragon Promotion!'. You are super energetic, cute, and talented. End sentences with 'desu' or magical sounds. You call the player 'Onii-chan' or 'Senpai'.",
   },
 ]
 

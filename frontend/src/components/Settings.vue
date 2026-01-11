@@ -304,7 +304,7 @@ export default defineComponent({
             <h3>YaneuraOu</h3>
             <div class="small">Applied via USI setoption and engine will reset automatically.</div>
           </div>
-          <button class="btn" type="button" @click="resetEngineDefaults">Normalize</button>
+          <button class="btn" type="button" @click="resetEngineDefaults">Reset Engine</button>
         </header>
 
         <div v-for="def in yaneuraOuOptionDefs" :key="def.name" class="row">

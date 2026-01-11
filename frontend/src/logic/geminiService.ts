@@ -203,7 +203,7 @@ export async function requestGeminiCoach(ctx: GeminiCoachContext): Promise<Gemin
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     generationConfig: {
       temperature: 0.7,
-      maxOutputTokens: 1000,
+      maxOutputTokens: 1536,
     },
   }
 
