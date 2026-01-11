@@ -17,6 +17,7 @@ type Props = {
   coachVoice?: string
   coachLanguage?: SettingsState['textLanguage']
   personalityPrompt?: string
+  playerColor?: string
   lastRoundMove?: string
   sideLastMove?: string
   sideToMove?: string
@@ -67,6 +68,7 @@ export default defineComponent({
     coachVoice: { type: String, default: '' },
     coachLanguage: { type: String as () => Props['coachLanguage'], default: '' },
     personalityPrompt: { type: String, default: '' },
+    playerColor: { type: String, default: '' },
     lastRoundMove: { type: String, default: '' },
     sideLastMove: { type: String, default: '' },
     sideToMove: { type: String, default: '' },
@@ -137,6 +139,17 @@ export default defineComponent({
       const coach = mergeCoach(baseCoach, this.$props as Props)
       if (!coach) return
 
+      const positionText = (() => {
+        const parts: string[] = []
+        if (isNonEmptyString(this.playerColor)) {
+          const raw = this.playerColor.trim()
+          const pretty = raw === 'sente' ? 'Sente' : raw === 'gote' ? 'Gote' : raw
+          parts.push(`Player side: ${pretty}`)
+        }
+        if (isNonEmptyString(this.positionText)) parts.push(this.positionText.trim())
+        return parts.length > 0 ? parts.join('; ') : undefined
+      })()
+
       const ctx = makeContextFromAnalysis(
         analysis,
         coach,
@@ -147,7 +160,7 @@ export default defineComponent({
             : undefined,
           sideLastMove: isNonEmptyString(this.sideLastMove) ? this.sideLastMove.trim() : undefined,
           sideToMove: isNonEmptyString(this.sideToMove) ? this.sideToMove.trim() : undefined,
-          positionText: isNonEmptyString(this.positionText) ? this.positionText.trim() : undefined,
+          positionText,
           isUndo: Boolean(this.isUndo),
         },
       )

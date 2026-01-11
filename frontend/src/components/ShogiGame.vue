@@ -20,6 +20,13 @@
       />
     </div>
 
+    <div class="game-meta">
+      <div class="meta-item">
+        <span class="meta-label">Player</span>
+        <span class="meta-value">{{ playerColor ?? '-' }}</span>
+      </div>
+    </div>
+
     <div v-if="syncEnabled && syncError" class="sync-overlay">
       <div class="sync-overlay-card">
         <div class="sync-title">Sync Error</div>
@@ -42,6 +49,8 @@ import {
 import type { PieceMovePayload, PieceDropPayload } from './ShogiBoard.vue'
 import { parseSFEN, toSFEN, type KomadaiItem } from '@/utils/sfenUtils'
 import { calculateLegalMovesOnBoard, calculateLegalDrops } from '@/logic/shogiRules'
+import type { GameInfo, PlayerColor } from '@/schemes/gameInfo'
+import { isPlayerColor, isGameInfo } from '@/schemes/gameInfo'
 
 interface ShogiBoardInstance {
   setCell: (index: number, piece: IShogiPiece | null) => void
@@ -59,7 +68,7 @@ type LishogiStateItem = {
 }
 
 type LishogiStateResponse = {
-  state: LishogiStateItem[]
+  state: unknown
   timestamp: number
   age_ms: number
 }
@@ -69,6 +78,10 @@ const LISHOGI_STATE_URL = 'http://127.0.0.1:3080/api/state'
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.trim().length > 0
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null
 }
 
 /**
@@ -84,6 +97,7 @@ export default defineComponent({
   },
   emits: {
     'sfen-change': (sfen: string) => typeof sfen === 'string' && sfen.trim().length > 0,
+    'game-info-change': (v: GameInfo) => isGameInfo(v),
   },
   data() {
     return {
@@ -94,6 +108,7 @@ export default defineComponent({
       lastSyncedSFEN: '' as string,
       syncTimer: null as ReturnType<typeof setInterval> | null,
       syncError: '' as string,
+      playerColor: null as PlayerColor | null,
     }
   },
   mounted() {
@@ -126,6 +141,11 @@ export default defineComponent({
       const exported = this.exportSFEN()
       if (!isNonEmptyString(exported)) return
       this.$emit('sfen-change', exported)
+
+      if (this.playerColor) {
+        const gameInfo: GameInfo = { sfen: exported, player: { color: this.playerColor } }
+        this.$emit('game-info-change', gameInfo)
+      }
     },
 
     applySFEN(sfen: string) {
@@ -191,15 +211,54 @@ export default defineComponent({
       this.syncError = ''
     },
 
+    isLishogiStateItem(v: unknown): v is LishogiStateItem {
+      if (!isObject(v)) return false
+      const o = v
+      return typeof o.ply === 'number' && typeof o.sfen === 'string'
+    },
+
+    extractPlayerColor(v: unknown): PlayerColor | null {
+      if (!isObject(v)) return null
+      const color = v.color
+      return isPlayerColor(color) ? color : null
+    },
+
+    extractStepsAndPlayerColor(v: unknown): {
+      steps: LishogiStateItem[]
+      playerColor: PlayerColor | null
+    } {
+      if (Array.isArray(v)) {
+        const steps = v.filter((x): x is LishogiStateItem => this.isLishogiStateItem(x))
+        return { steps, playerColor: null }
+      }
+
+      if (isObject(v)) {
+        const o = v
+        const rawSteps = o.steps
+        const steps = Array.isArray(rawSteps)
+          ? rawSteps.filter((x): x is LishogiStateItem => this.isLishogiStateItem(x))
+          : []
+
+        const playerColor = this.extractPlayerColor(o.player)
+
+        return { steps, playerColor }
+      }
+
+      return { steps: [], playerColor: null }
+    },
+
     async syncOnce() {
       try {
         const res = await fetch(LISHOGI_STATE_URL, { cache: 'no-store' })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
         const data = (await res.json()) as LishogiStateResponse
-        if (!Array.isArray(data.state) || data.state.length === 0) return
+        const extracted = this.extractStepsAndPlayerColor(data.state)
+        if (extracted.steps.length === 0) return
 
-        const latest = data.state[data.state.length - 1]
+        if (extracted.playerColor) this.playerColor = extracted.playerColor
+
+        const latest = extracted.steps[extracted.steps.length - 1]
         if (!latest?.sfen) return
 
         if (latest.sfen === this.lastSyncedSFEN) return
@@ -263,6 +322,7 @@ export default defineComponent({
       board.setCell(from, null)
       board.setCell(to, source)
       this.moveNumber++
+      this.currentTurn = this.currentTurn === 'self' ? 'opponent' : 'self'
       this.emitCurrentSFEN()
     },
 
@@ -281,6 +341,7 @@ export default defineComponent({
       this.removeFromKomadai(payload.pieceType, payload.owner)
       board.setCell(payload.to, newPiece)
       this.moveNumber++
+      this.currentTurn = this.currentTurn === 'self' ? 'opponent' : 'self'
       this.emitCurrentSFEN()
     },
 
@@ -329,6 +390,32 @@ export default defineComponent({
   gap: 20px;
   justify-content: center;
   padding: 20px;
+}
+
+.game-meta {
+  display: flex;
+  justify-content: center;
+  padding: 0 20px 8px;
+}
+
+.meta-item {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #eee;
+  background: #fafafa;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.meta-label {
+  color: #666;
+}
+
+.meta-value {
+  color: #111;
+  font-weight: 700;
 }
 
 .sync-overlay {

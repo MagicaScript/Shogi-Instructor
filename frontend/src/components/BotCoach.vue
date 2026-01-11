@@ -6,20 +6,29 @@ import { BotCoach } from '@/logic/botCoach'
 import GeminiService from '@/components/GeminiService.vue'
 import { settingsStore, type CoachProfile, type SettingsState } from '@/schemes/settings'
 import type { GeminiCoachResponse } from '@/logic/geminiService'
+import type { GameInfo, PlayerColor } from '@/schemes/gameInfo'
+import { getSideToMoveFromSfen, oppositeColor } from '@/schemes/gameInfo'
+import { scoreToKey } from '@/schemes/usi'
 
 type Props = {
   analysis: EngineAnalysisPayload | null
   avatarSrc?: string
+  gameInfo?: GameInfo | null
 }
 
 type Data = {
   coach: BotCoach
-  speech: string
   loadError: string
-  geminiError: string
-  geminiLoading: boolean
+  playerSpeech: string
+  opponentSpeech: string
+  playerGeminiError: string
+  opponentGeminiError: string
+  playerGeminiLoading: boolean
+  opponentGeminiLoading: boolean
   state: SettingsState
   unsub: null | (() => void)
+  playerMeta: EngineAnalysisPayload | null
+  opponentMeta: EngineAnalysisPayload | null
 }
 
 export default defineComponent({
@@ -30,17 +39,23 @@ export default defineComponent({
   props: {
     analysis: { type: Object as () => Props['analysis'], default: null },
     avatarSrc: { type: String, default: '' },
+    gameInfo: { type: Object as () => Props['gameInfo'], default: null },
   },
 
   data(): Data {
     return {
       coach: new BotCoach(),
-      speech: 'Waiting for analysis...',
       loadError: '',
-      geminiError: '',
-      geminiLoading: false,
+      playerSpeech: 'Waiting for analysis...',
+      opponentSpeech: 'Waiting for analysis...',
+      playerGeminiError: '',
+      opponentGeminiError: '',
+      playerGeminiLoading: false,
+      opponentGeminiLoading: false,
       state: settingsStore.getState(),
       unsub: null,
+      playerMeta: null,
+      opponentMeta: null,
     }
   },
 
@@ -63,13 +78,28 @@ export default defineComponent({
     coachName(): string {
       return this.selectedCoach?.name ?? 'Bot Coach'
     },
+
+    playerColor(): PlayerColor | null {
+      return this.gameInfo?.player.color ?? null
+    },
+
+    sideToMoveLabel(): string {
+      const side = this.safeAnalysis ? getSideToMoveFromSfen(this.safeAnalysis.sfen) : null
+      return this.formatSideLabel(side)
+    },
+
+    sideLastMoveLabel(): string {
+      const sideToMove = this.safeAnalysis ? getSideToMoveFromSfen(this.safeAnalysis.sfen) : null
+      const sideLastMove = sideToMove ? oppositeColor(sideToMove) : null
+      return this.formatSideLabel(sideLastMove)
+    },
   },
 
   watch: {
     safeAnalysis: {
       deep: true,
       handler() {
-        this.updateSpeechLocal()
+        this.updateMetaSnapshots()
       },
     },
   },
@@ -79,7 +109,7 @@ export default defineComponent({
       this.state = s
     })
 
-    void this.ensureInit().then(() => this.updateSpeechLocal())
+    void this.ensureInit()
   },
 
   beforeUnmount() {
@@ -87,27 +117,87 @@ export default defineComponent({
   },
 
   methods: {
+    formatSideLabel(side: PlayerColor | null): string {
+      if (!side) return ''
+      const who = this.playerColor ? (side === this.playerColor ? 'player' : 'opponent') : null
+      const name = side === 'sente' ? 'Sente' : 'Gote'
+      return who ? `${name} (${who})` : name
+    },
+
+    sideToMoveLabelFor(analysis: EngineAnalysisPayload | null): string {
+      const side = analysis ? getSideToMoveFromSfen(analysis.sfen) : null
+      return this.formatSideLabel(side)
+    },
+
+    sideLastMoveLabelFor(analysis: EngineAnalysisPayload | null): string {
+      const sideToMove = analysis ? getSideToMoveFromSfen(analysis.sfen) : null
+      const sideLastMove = sideToMove ? oppositeColor(sideToMove) : null
+      return this.formatSideLabel(sideLastMove)
+    },
+
+    isPlaceholderSpeech(v: string): boolean {
+      const t = v.trim().toLowerCase()
+      return t.length === 0 || t.startsWith('waiting for')
+    },
+
     async ensureInit() {
       await this.coach.init()
       this.loadError = this.coach.getLoadError() ?? ''
     },
 
-    updateSpeechLocal() {
-      this.speech = this.coach.getPhrase(this.safeAnalysis)
+    updateMetaSnapshots() {
+      const analysis = this.safeAnalysis
+      if (!analysis) return
+      const playerColor = this.playerColor
+      if (!playerColor) return
+
+      const sideToMove = getSideToMoveFromSfen(analysis.sfen)
+      if (!sideToMove) return
+
+      const lastMoveSide = oppositeColor(sideToMove)
+      const lastMover = lastMoveSide === playerColor ? 'player' : 'opponent'
+
+      if (lastMover === 'player') {
+        this.playerMeta = analysis
+        if (this.isPlaceholderSpeech(this.playerSpeech))
+          this.playerSpeech = this.coach.getPhrase(analysis)
+      } else {
+        this.opponentMeta = analysis
+        if (this.isPlaceholderSpeech(this.opponentSpeech))
+          this.opponentSpeech = this.coach.getPhrase(analysis)
+      }
     },
 
-    onGeminiResult(out: GeminiCoachResponse) {
-      this.geminiError = ''
-      this.speech = out.text
+    formatEval(score: EngineAnalysisPayload['score']): string {
+      return scoreToKey(score)
     },
 
-    onGeminiError(msg: string) {
-      this.geminiError = msg
-      this.updateSpeechLocal()
+    onPlayerGeminiResult(out: GeminiCoachResponse) {
+      this.playerGeminiError = ''
+      this.playerSpeech = out.text
     },
 
-    onGeminiLoading(v: boolean) {
-      this.geminiLoading = v
+    onOpponentGeminiResult(out: GeminiCoachResponse) {
+      this.opponentGeminiError = ''
+      this.opponentSpeech = out.text
+    },
+
+    onPlayerGeminiError(msg: string) {
+      this.playerGeminiError = msg
+      if (this.playerMeta) this.playerSpeech = this.coach.getPhrase(this.playerMeta)
+    },
+
+    onOpponentGeminiError(msg: string) {
+      this.opponentGeminiError = msg
+      if (this.opponentMeta) this.opponentSpeech = this.coach.getPhrase(this.opponentMeta)
+    },
+
+    onPlayerGeminiLoading(v: boolean) {
+      this.playerGeminiLoading = v
+    },
+
+    onOpponentGeminiLoading(v: boolean) {
+      this.opponentGeminiLoading = v
     },
   },
 })
@@ -121,9 +211,8 @@ export default defineComponent({
         <div>
           <h2>{{ coachName }}</h2>
           <div v-if="loadError" class="error">{{ loadError }}</div>
-          <div v-else-if="geminiError" class="error">{{ geminiError }}</div>
-          <div v-else class="status" :class="{ on: geminiLoading }">
-            {{ geminiLoading ? 'Generating...' : 'Ready' }}
+          <div v-else class="status" :class="{ on: playerGeminiLoading || opponentGeminiLoading }">
+            {{ playerGeminiLoading || opponentGeminiLoading ? 'Generating...' : 'Ready' }}
           </div>
         </div>
       </div>
@@ -131,43 +220,100 @@ export default defineComponent({
 
     <div class="coach-body">
       <div class="speech-box">
-        <div class="speech mono">
-          {{ speech }}
-        </div>
+        <div class="speech-title">After Player move</div>
+        <div v-if="playerGeminiError" class="error">{{ playerGeminiError }}</div>
+        <div class="speech mono">{{ playerSpeech }}</div>
+      </div>
+
+      <div class="speech-box">
+        <div class="speech-title">After Opponent move</div>
+        <div v-if="opponentGeminiError" class="error">{{ opponentGeminiError }}</div>
+        <div class="speech mono">{{ opponentSpeech }}</div>
       </div>
 
       <GeminiService
-        v-if="safeAnalysis && selectedCoach"
-        :analysis="safeAnalysis"
+        v-if="playerMeta && selectedCoach"
+        :analysis="playerMeta"
         :coach-id="selectedCoach.id"
         :coach-name="selectedCoach.name"
         :coach-image="selectedCoach.image"
         :coach-voice="selectedCoach.voice"
         :coach-language="selectedCoach.language"
         :personality-prompt="selectedCoach.personalityPrompt"
-        @result="onGeminiResult"
-        @error="onGeminiError"
-        @loading="onGeminiLoading"
+        :player-color="playerColor ?? ''"
+        :side-last-move="sideLastMoveLabelFor(playerMeta)"
+        :side-to-move="sideToMoveLabelFor(playerMeta)"
+        position-text="Evaluate the player's last move: intent, quality, risks, and one concrete improvement."
+        @result="onPlayerGeminiResult"
+        @error="onPlayerGeminiError"
+        @loading="onPlayerGeminiLoading"
       />
 
-      <div class="meta" v-if="safeAnalysis">
+      <GeminiService
+        v-if="opponentMeta && selectedCoach"
+        :analysis="opponentMeta"
+        :coach-id="selectedCoach.id"
+        :coach-name="selectedCoach.name"
+        :coach-image="selectedCoach.image"
+        :coach-voice="selectedCoach.voice"
+        :coach-language="selectedCoach.language"
+        :personality-prompt="selectedCoach.personalityPrompt"
+        :player-color="playerColor ?? ''"
+        :side-last-move="sideLastMoveLabelFor(opponentMeta)"
+        :side-to-move="sideToMoveLabelFor(opponentMeta)"
+        position-text="Explain the opponent's last move: purpose, threat, and how the player should respond."
+        @result="onOpponentGeminiResult"
+        @error="onOpponentGeminiError"
+        @loading="onOpponentGeminiLoading"
+      />
+
+      <div class="player-meta">
         <div class="row">
-          <div class="label">SFEN</div>
-          <div class="value mono">{{ safeAnalysis.sfen }}</div>
+          <div class="label">SFEN (after Player move)</div>
+          <div class="value mono">{{ playerMeta?.sfen ?? '-' }}</div>
         </div>
         <div class="row">
-          <div class="label">Bestmove</div>
-          <div class="value mono">{{ safeAnalysis.bestmove ?? '-' }}</div>
+          <div class="label">BestMoveForOpponents</div>
+          <div class="value mono">{{ playerMeta?.bestmove ?? '-' }}</div>
         </div>
         <div class="row">
           <div class="label">Ponder</div>
-          <div class="value mono">{{ safeAnalysis.ponder ?? '-' }}</div>
+          <div class="value mono">{{ playerMeta?.ponder ?? '-' }}</div>
         </div>
         <div class="row">
           <div class="label">PV</div>
           <div class="value mono">
-            {{ safeAnalysis.pv?.length ? safeAnalysis.pv.join(' ') : '-' }}
+            {{ playerMeta?.pv?.length ? playerMeta.pv.join(' ') : '-' }}
           </div>
+        </div>
+        <div class="row">
+          <div class="label">EngineEvalForOpponents</div>
+          <div class="value mono">{{ playerMeta ? formatEval(playerMeta.score) : '-' }}</div>
+        </div>
+      </div>
+
+      <div class="opponents-meta">
+        <div class="row">
+          <div class="label">SFEN (after Opponent move)</div>
+          <div class="value mono">{{ opponentMeta?.sfen ?? '-' }}</div>
+        </div>
+        <div class="row">
+          <div class="label">BestMoveForPlayer</div>
+          <div class="value mono">{{ opponentMeta?.bestmove ?? '-' }}</div>
+        </div>
+        <div class="row">
+          <div class="label">Ponder</div>
+          <div class="value mono">{{ opponentMeta?.ponder ?? '-' }}</div>
+        </div>
+        <div class="row">
+          <div class="label">PV</div>
+          <div class="value mono">
+            {{ opponentMeta?.pv?.length ? opponentMeta.pv.join(' ') : '-' }}
+          </div>
+        </div>
+        <div class="row">
+          <div class="label">EngineEvalForPlayer</div>
+          <div class="value mono">{{ opponentMeta ? formatEval(opponentMeta.score) : '-' }}</div>
         </div>
       </div>
     </div>
@@ -218,6 +364,12 @@ export default defineComponent({
   padding: 10px 12px;
 }
 
+.speech-title {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
 .speech {
   font-size: 13px;
   line-height: 1.5;
@@ -225,9 +377,14 @@ export default defineComponent({
   word-break: break-word;
 }
 
-.meta {
+.player-meta,
+.opponents-meta {
   display: grid;
   gap: 8px;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  background: #fafafa;
+  padding: 10px 12px;
 }
 
 .row {

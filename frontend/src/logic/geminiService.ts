@@ -25,13 +25,16 @@ export type GeminiCoachContext = {
     score?: UsiScore
     pv?: string[]
   }
-  board?: {
-    lastRoundMove?: string
-    sideLastMove?: string
-    sideToMove?: string
-    positionText?: string
-    isUndo?: boolean
-  }
+  board?: GeminiBoardContext
+}
+
+export type GeminiBoardContext = {
+  playerColor?: string
+  lastRoundMove?: string
+  sideLastMove?: string
+  sideToMove?: string
+  positionText?: string
+  isUndo?: boolean
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -103,6 +106,7 @@ function buildPrompt(ctx: GeminiCoachContext): string {
   }
 
   if (e.sfen.trim().length > 0) lines.push(`    - sfen: "${e.sfen.trim()}"`)
+  if (b?.playerColor) lines.push(`    - Player side: "${b.playerColor}"`)
   if (b?.lastRoundMove) lines.push(`    - Last round Move: "${b.lastRoundMove}"`)
   if (b?.sideLastMove) lines.push(`    - Side Last Move: "${b.sideLastMove}"`)
   if (b?.sideToMove) lines.push(`    - Side To Move: "${b.sideToMove}"`)
@@ -128,7 +132,7 @@ function buildPrompt(ctx: GeminiCoachContext): string {
 
   lines.push('')
   lines.push('GUIDELINES:')
-  lines.push('    1. Do NOT state any numeric evaluation score.')
+  lines.push('    1. Do NOT state any numeric evaluation score or best move.')
   lines.push('    2. Focus on the meaning of the last move (defense, attack, shape).')
   lines.push('    3. Keep it concise (under 30 words).')
   lines.push('    4. Speak directly to the user.')
@@ -239,7 +243,7 @@ export function makeContextFromAnalysis(
   analysis: EngineAnalysisPayload,
   coach: CoachProfile,
   settings: { textLanguage: TextLanguage; audioLanguage: TextLanguage },
-  board?: GeminiCoachContext['board'],
+  board?: GeminiBoardContext,
 ): GeminiCoachContext {
   return {
     coach,

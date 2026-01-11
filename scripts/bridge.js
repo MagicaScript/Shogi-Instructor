@@ -25,7 +25,7 @@ window.addEventListener("lishogi-game-data", (e) => {
 
 (() => {
   const ENDPOINT = "http://127.0.0.1:3080/api/chunk";
-  const INTERVAL_MS = 500;
+  const INTERVAL_MS = 200;
   const CHUNK_SIZE = 1200;
   const MAX_INFLIGHT = 8;
 
@@ -100,11 +100,36 @@ window.addEventListener("lishogi-game-data", (e) => {
   }
 
   function pickRoundData(d) {
-    return d?.steps;
+    const steps = d?.steps;
+    if (!steps) return null;
+
+    const playerColor = d?.player?.color;
+    const opponentColor = d?.opponent?.color;
+
+    const isColor = (c) => c === "sente" || c === "gote";
+    const opposite = (c) => (c === "sente" ? "gote" : "sente");
+
+    const payload = { steps };
+
+    if (isColor(playerColor)) {
+      payload.player = { color: playerColor };
+    }
+
+    if (isColor(playerColor) && isColor(opponentColor)) {
+      const expected = opposite(playerColor);
+      console.assert(
+        opponentColor === expected,
+        `Unexpected opponent.color: expected "${expected}", got "${opponentColor}"`,
+      );
+      payload.opponent = { color: opponentColor };
+    }
+
+    return payload;
   }
 
   setInterval(() => {
     const d = latestData;
-    if (d) chunkAndSend(pickRoundData(d)).catch(() => {});
+    const payload = d ? pickRoundData(d) : null;
+    if (payload) chunkAndSend(payload).catch(() => {});
   }, INTERVAL_MS);
 })();

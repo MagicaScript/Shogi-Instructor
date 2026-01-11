@@ -6,10 +6,13 @@ import BotCoach from './components/BotCoach.vue'
 import SettingsPanel from './components/Settings.vue'
 import type { EngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import { isEngineAnalysisPayload } from '@/schemes/engineAnalysis'
+import type { GameInfo } from '@/schemes/gameInfo'
+import { isGameInfo } from '@/schemes/gameInfo'
 
 const syncEnabled = ref(false)
 const currentSfen = ref('')
 const engineAnalysis = ref<EngineAnalysisPayload | null>(null)
+const gameInfo = ref<GameInfo | null>(null)
 
 function toggleSync() {
   syncEnabled.value = !syncEnabled.value
@@ -17,6 +20,12 @@ function toggleSync() {
 
 function handleSfenChange(next: string) {
   currentSfen.value = next
+}
+
+function handleGameInfoChange(next: GameInfo) {
+  if (!isGameInfo(next)) return
+  gameInfo.value = next
+  currentSfen.value = next.sfen
 }
 
 function handleEngineAnalysisUpdate(payload: EngineAnalysisPayload) {
@@ -41,7 +50,11 @@ function handleEngineAnalysisUpdate(payload: EngineAnalysisPayload) {
 
   <main class="main">
     <div class="left">
-      <ShogiGame :sync-enabled="syncEnabled" @sfen-change="handleSfenChange" />
+      <ShogiGame
+        :sync-enabled="syncEnabled"
+        @sfen-change="handleSfenChange"
+        @game-info-change="handleGameInfoChange"
+      />
     </div>
 
     <div class="right">
@@ -49,11 +62,11 @@ function handleEngineAnalysisUpdate(payload: EngineAnalysisPayload) {
 
       <YaneuraOuEngine
         :sfen="currentSfen"
-        :depth="20"
+        :depth="18"
         @analysis-update="handleEngineAnalysisUpdate"
       />
 
-      <BotCoach :analysis="engineAnalysis" />
+      <BotCoach :analysis="engineAnalysis" :game-info="gameInfo" />
     </div>
   </main>
 </template>
