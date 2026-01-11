@@ -67,3 +67,8 @@ Then open the printed Vite URL (typically `http://localhost:5173`).
 - **Sync errors**: the frontend expects `/api/state` to contain recent data; refresh lishogi and re-run the bridge script.
 - **LLM settings**: configure your Gemini settings in the app UI (API key, base URL, model).
 
+## Licensing / GPL notice
+
+This project uses the open-source Shogi engine **YaneuraOu**: [`https://github.com/yaneurao/YaneuraOu`](https://github.com/yaneurao/YaneuraOu).
+
+YaneuraOu is licensed under **GPL-3.0**, which is a **strong copyleft** license. If you distribute this project (or binaries built from it) in a way that forms a combined/derivative work with GPL-licensed components, you must comply with GPL-3.0 requirements (including providing corresponding source code under GPL-3.0).
