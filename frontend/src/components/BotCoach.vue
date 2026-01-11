@@ -22,24 +22,6 @@ type Data = {
   unsub: null | (() => void)
 }
 
-function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null
-}
-
-function isGeminiCoachResponse(v: unknown): v is GeminiCoachResponse {
-  if (!isObject(v)) return false
-  return (
-    typeof v.text === 'string' &&
-    v.text.trim().length > 0 &&
-    typeof v.audioText === 'string' &&
-    v.audioText.trim().length > 0 &&
-    (v.emotion === 'happy' ||
-      v.emotion === 'neutral' ||
-      v.emotion === 'concerned' ||
-      v.emotion === 'excited')
-  )
-}
-
 export default defineComponent({
   name: 'BotCoach',
 

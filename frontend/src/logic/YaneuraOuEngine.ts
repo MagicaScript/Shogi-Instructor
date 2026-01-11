@@ -1,3 +1,14 @@
+/* src/logic/yaneuraOuEngine.ts */
+
+import { settingsStore, type SettingsState } from '@/schemes/settings'
+import {
+  YANEURAOU_OPTION_DEFS,
+  YANEURAOU_PARAM_DEFAULTS,
+  coerceYaneuraOuParam,
+  type YaneuraOuOptionDef,
+  type YaneuraOuParam,
+} from '@/schemes/YaneuraOuParam'
+
 export type Score =
   | { type: 'none' }
   | { type: 'cp'; value: number }
@@ -62,7 +73,6 @@ type EngineInstance = {
   terminate?: () => void
   FS?: EmscriptenFs
 
-  /** Some builds expose this (your working code uses it). */
   addMessageListener?: (listener: (msg: unknown) => void) => void
   removeMessageListener?: (listener: (msg: unknown) => void) => void
 
@@ -177,7 +187,6 @@ function parseUsiInfoLine(line: string): UsiInfo {
         i = parts.length
         break
       default:
-        // Skip one token as a conservative fallback for unknown keys.
         if (i < parts.length) i += 1
         break
     }
@@ -241,12 +250,10 @@ function loadModuleWrapperOnce(moduleUrl: string, attachGlobalName: string): Pro
 
 function buildDefaultFactoryCandidates(): string[] {
   return [
-    // Common for YaneuraOu WASM bundles
     'YaneuraOu_Material9',
     'YaneuraOu',
     'Yaneuraou',
     'yaneuraou',
-    // Emscripten modularize defaults
     'Module',
     'createModule',
     'createYaneuraOu',
@@ -313,6 +320,34 @@ function hasAddMessageListener(
   return isFunction(inst.addMessageListener)
 }
 
+function stringifyUsiValue(v: unknown): string {
+  if (typeof v === 'boolean') return v ? 'true' : 'false'
+  if (typeof v === 'number') return String(Math.trunc(v))
+  if (typeof v === 'string') return v
+  return String(v)
+}
+
+function paramEquals(a: YaneuraOuParam, b: YaneuraOuParam): boolean {
+  for (const def of YANEURAOU_OPTION_DEFS) {
+    const k = def.name
+    if (a[k] !== b[k]) return false
+  }
+  return true
+}
+
+function diffParams(
+  prev: YaneuraOuParam,
+  next: YaneuraOuParam,
+): Array<{ def: YaneuraOuOptionDef; value: unknown }> {
+  const out: Array<{ def: YaneuraOuOptionDef; value: unknown }> = []
+  for (const def of YANEURAOU_OPTION_DEFS) {
+    const k = def.name
+    if (prev[k] === next[k]) continue
+    out.push({ def, value: next[k] })
+  }
+  return out
+}
+
 export class YaneuraOuEngine {
   private instance: EngineInstance | null = null
   private removeMessageListener: (() => void) | null = null
@@ -328,6 +363,10 @@ export class YaneuraOuEngine {
 
   private recentLines: string[] = []
   private readonly recentLinesCap = 400
+
+  private cancelSettingsSub: (() => void) | null = null
+  private lastAppliedParams: YaneuraOuParam = { ...YANEURAOU_PARAM_DEFAULTS }
+  private applyQueue: Promise<void> = Promise.resolve()
 
   /** Subscribe to engine output lines. */
   onLine(cb: LineListener): () => void {
@@ -360,10 +399,8 @@ export class YaneuraOuEngine {
       }
     }
 
-    // Priority: engine-specific listener API (your working example uses this).
     if (hasAddMessageListener(instance)) {
       const wrapped = (msg: unknown) => {
-        // Some builds send a single line, some send multi-line chunks.
         pushText(msg)
       }
 
@@ -374,7 +411,6 @@ export class YaneuraOuEngine {
       return
     }
 
-    // WebWorker-like
     if (instance.addEventListener && instance.removeEventListener) {
       const wrapped = (ev: MessageEvent<unknown>) => pushText(this.extractMessageData(ev))
       instance.addEventListener('message', wrapped)
@@ -382,7 +418,6 @@ export class YaneuraOuEngine {
       return
     }
 
-    // onmessage-like
     if ('onmessage' in instance) {
       const wrapped = (ev: MessageEvent<unknown>) => pushText(this.extractMessageData(ev))
       instance.onmessage = wrapped
@@ -392,7 +427,6 @@ export class YaneuraOuEngine {
       return
     }
 
-    // Node-style emitter-like
     if (instance.on) {
       const wrapped = (ev: unknown) => pushText(this.extractMessageData(ev))
       instance.on('message', wrapped)
@@ -449,6 +483,60 @@ export class YaneuraOuEngine {
     const p = this.waitForLine((l) => lineHasToken(l, token), timeoutMs)
     this.post(command)
     return p
+  }
+
+  private getParamsFromState(s: SettingsState): YaneuraOuParam {
+    return coerceYaneuraOuParam(s.yaneuraOu, YANEURAOU_PARAM_DEFAULTS)
+  }
+
+  private enqueueApply(fn: () => Promise<void>): void {
+    this.applyQueue = this.applyQueue.then(fn).catch((e: unknown) => {
+      const msg = e instanceof Error ? e.message : String(e)
+      this.emitLine(`! setoption sync failed: ${msg}`)
+    })
+  }
+
+  private applyParamsReactive(next: YaneuraOuParam): void {
+    if (!this.instance) {
+      this.lastAppliedParams = { ...next }
+      return
+    }
+
+    const prev = this.lastAppliedParams
+    if (paramEquals(prev, next)) return
+
+    const changes = diffParams(prev, next)
+    this.lastAppliedParams = { ...next }
+
+    this.enqueueApply(async () => {
+      if (this.disposed || !this.instance) return
+
+      if (this.analyzing) {
+        try {
+          this.post('stop')
+        } catch {
+          // ignore
+        }
+      }
+
+      for (const ch of changes) {
+        const name = ch.def.name
+        const v = stringifyUsiValue(ch.value)
+        this.post(`setoption name ${String(name)} value ${v}`)
+      }
+
+      await this.postAndWait('isready', 'readyok', this.handshakeTimeoutMs)
+      this.post('usinewgame')
+      await this.postAndWait('isready', 'readyok', this.handshakeTimeoutMs)
+    })
+  }
+
+  private bindSettings(): void {
+    if (this.cancelSettingsSub) return
+    this.cancelSettingsSub = settingsStore.subscribe((s) => {
+      const params = this.getParamsFromState(s)
+      this.applyParamsReactive(params)
+    })
   }
 
   /** Initialize the engine runtime and finish USI handshake. */
@@ -512,7 +600,6 @@ export class YaneuraOuEngine {
         locateFile: (p: string, prefix?: string) => {
           if (p.endsWith('.worker.js')) return workerUrl
           if (p.endsWith('.wasm')) return wasmUrl
-          // Some builds call locateFile for other assets; keep default behavior.
           return (prefix ?? '') + p
         },
         print: (text) => {
@@ -531,29 +618,37 @@ export class YaneuraOuEngine {
       this.instance = inst
       this.attachOutput(inst)
 
+      const deferredSetOptions: string[] = []
+
       const FS = inst.FS
       if (FS && typeof FS.writeFile === 'function') {
         if (options.book) {
           const buf = await toUint8Array(options.book.data)
           FS.writeFile(`/${options.book.fileName}`, buf)
-          this.post('setoption name BookDir value .')
-          this.post(`setoption name BookFile value ${options.book.fileName}`)
+          deferredSetOptions.push('setoption name BookDir value .')
+          deferredSetOptions.push(`setoption name BookFile value ${options.book.fileName}`)
         }
 
         if (options.evalFile) {
           const buf = await toUint8Array(options.evalFile.data)
           FS.writeFile(`/${options.evalFile.fileName}`, buf)
-          this.post('setoption name EvalDir value .')
-        }
-      }
-
-      if (options.setOptions) {
-        for (const [k, v] of Object.entries(options.setOptions)) {
-          this.post(`setoption name ${k} value ${String(v)}`)
+          deferredSetOptions.push('setoption name EvalDir value .')
         }
       }
 
       await this.postAndWait('usi', 'usiok', this.handshakeTimeoutMs)
+
+      if (options.setOptions) {
+        for (const [k, v] of Object.entries(options.setOptions)) {
+          deferredSetOptions.push(`setoption name ${k} value ${stringifyUsiValue(v)}`)
+        }
+      }
+
+      for (const cmd of deferredSetOptions) this.post(cmd)
+
+      this.bindSettings()
+      this.applyParamsReactive(this.getParamsFromState(settingsStore.getState()))
+
       await this.postAndWait('isready', 'readyok', this.handshakeTimeoutMs)
 
       this.post('usinewgame')
@@ -638,6 +733,14 @@ export class YaneuraOuEngine {
       this.instance?.postMessage('quit')
     } catch {
       // ignore
+    }
+
+    try {
+      this.cancelSettingsSub?.()
+    } catch {
+      // ignore
+    } finally {
+      this.cancelSettingsSub = null
     }
 
     try {

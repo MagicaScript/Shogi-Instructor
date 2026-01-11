@@ -1,5 +1,13 @@
 /* src/schemes/settings.ts */
 
+import {
+  YANEURAOU_PARAM_DEFAULTS,
+  applyYaneuraOuParamPatch,
+  coerceYaneuraOuParam,
+  isYaneuraOuParam,
+  type YaneuraOuParam,
+} from '@/schemes/YaneuraOuParam'
+
 export const TEXT_LANGUAGES = ['English', 'Japanese', 'Chinese'] as const
 export type TextLanguage = (typeof TEXT_LANGUAGES)[number]
 
@@ -18,6 +26,7 @@ export type SettingsState = {
   textLanguage: TextLanguage
   audioLanguage: TextLanguage
   coachId: string
+  yaneuraOu: YaneuraOuParam
 }
 
 const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com'
@@ -87,7 +96,8 @@ export function isSettingsState(v: unknown): v is SettingsState {
     isTextLanguage(v.textLanguage) &&
     isTextLanguage(v.audioLanguage) &&
     typeof v.coachId === 'string' &&
-    v.coachId.trim().length > 0
+    v.coachId.trim().length > 0 &&
+    isYaneuraOuParam(v.yaneuraOu)
   )
 }
 
@@ -143,7 +153,35 @@ function makeDefaultState(): SettingsState {
     textLanguage: 'English',
     audioLanguage: 'English',
     coachId: DEFAULT_COACHES[0]?.id ?? 'calm-sensei',
+    yaneuraOu: { ...YANEURAOU_PARAM_DEFAULTS },
   }
+}
+
+function coerceSettingsState(raw: unknown): SettingsState {
+  const base = makeDefaultState()
+  if (!isObject(raw)) return base
+
+  const r = raw as Record<string, unknown>
+
+  const geminiBaseUrl =
+    typeof r.geminiBaseUrl === 'string' && r.geminiBaseUrl.trim().length > 0
+      ? r.geminiBaseUrl.trim()
+      : base.geminiBaseUrl
+
+  const geminiModelName =
+    typeof r.geminiModelName === 'string' && r.geminiModelName.trim().length > 0
+      ? r.geminiModelName.trim()
+      : base.geminiModelName
+
+  const textLanguage = isTextLanguage(r.textLanguage) ? r.textLanguage : base.textLanguage
+  const audioLanguage = isTextLanguage(r.audioLanguage) ? r.audioLanguage : base.audioLanguage
+
+  const coachId =
+    typeof r.coachId === 'string' && r.coachId.trim().length > 0 ? r.coachId.trim() : base.coachId
+
+  const yaneuraOu = coerceYaneuraOuParam(r.yaneuraOu, base.yaneuraOu)
+
+  return { geminiBaseUrl, geminiModelName, textLanguage, audioLanguage, coachId, yaneuraOu }
 }
 
 type Listener = (state: SettingsState) => void
@@ -172,7 +210,7 @@ export class SettingsStore {
   }
 
   getState(): SettingsState {
-    return { ...this.state }
+    return { ...this.state, yaneuraOu: { ...this.state.yaneuraOu } }
   }
 
   subscribe(listener: Listener): () => void {
@@ -187,11 +225,17 @@ export class SettingsStore {
     const next: SettingsState = {
       ...this.state,
       ...patch,
+      yaneuraOu: patch.yaneuraOu ? { ...patch.yaneuraOu } : this.state.yaneuraOu,
     }
     if (!isSettingsState(next)) return
     this.state = next
     this.persistState()
     this.emit()
+  }
+
+  updateYaneuraOu(patch: Partial<YaneuraOuParam>): void {
+    const next = applyYaneuraOuParamPatch(this.state.yaneuraOu, patch)
+    this.update({ yaneuraOu: next })
   }
 
   setGeminiApiKey(apiKey: string): void {
@@ -221,8 +265,7 @@ export class SettingsStore {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (!raw) return makeDefaultState()
     const json = safeParseJson(raw)
-    if (!json || !isSettingsState(json)) return makeDefaultState()
-    return json
+    return coerceSettingsState(json)
   }
 
   private persistState(): void {

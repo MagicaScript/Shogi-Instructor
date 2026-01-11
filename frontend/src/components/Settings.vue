@@ -10,6 +10,11 @@ import {
   type SettingsState,
   type TextLanguage,
 } from '@/schemes/settings'
+import {
+  YANEURAOU_OPTION_DEFS,
+  type YaneuraOuOptionDef,
+  type YaneuraOuParam,
+} from '@/schemes/YaneuraOuParam'
 
 type Data = {
   state: SettingsState
@@ -43,6 +48,10 @@ export default defineComponent({
 
     selectedCoach(): CoachProfile | null {
       return settingsStore.getCoachById(this.state.coachId)
+    },
+
+    yaneuraOuOptionDefs(): readonly YaneuraOuOptionDef[] {
+      return YANEURAOU_OPTION_DEFS
     },
   },
 
@@ -119,6 +128,45 @@ export default defineComponent({
       this.flash('Reset to defaults.')
     },
 
+    resetEngineDefaults() {
+      settingsStore.updateYaneuraOu({})
+      this.flash('Engine params normalized.')
+    },
+
+    onEngineCheck(name: keyof YaneuraOuParam, checked: boolean) {
+      settingsStore.updateYaneuraOu({ [name]: checked } as Partial<YaneuraOuParam>)
+      this.flash('Saved.')
+    },
+
+    onEngineString(name: keyof YaneuraOuParam, value: string) {
+      settingsStore.updateYaneuraOu({ [name]: value } as Partial<YaneuraOuParam>)
+      this.flash('Saved.')
+    },
+
+    onEngineCombo(def: YaneuraOuOptionDef, value: string) {
+      if (def.type !== 'combo') return
+      if (!def.vars.includes(value)) return
+      const name = def.name as keyof YaneuraOuParam
+      settingsStore.updateYaneuraOu({ [name]: value } as Partial<YaneuraOuParam>)
+      this.flash('Saved.')
+    },
+
+    onEngineSpin(def: YaneuraOuOptionDef, raw: string) {
+      if (def.type !== 'spin') return
+      const name = def.name as keyof YaneuraOuParam
+
+      if (def.spinKind === 'bigint') {
+        settingsStore.updateYaneuraOu({ [name]: raw.trim() } as Partial<YaneuraOuParam>)
+        this.flash('Saved.')
+        return
+      }
+
+      const n = Number(raw)
+      if (!Number.isFinite(n)) return
+      settingsStore.updateYaneuraOu({ [name]: Math.trunc(n) } as Partial<YaneuraOuParam>)
+      this.flash('Saved.')
+    },
+
     flash(msg: string) {
       this.saveMessage = msg
       window.setTimeout(() => {
@@ -134,7 +182,7 @@ export default defineComponent({
     <header class="head">
       <div>
         <h2>Settings</h2>
-        <div class="hint">Gemini config and coach preferences.</div>
+        <div class="hint">Gemini config, coach preferences, and engine parameters.</div>
       </div>
       <button class="btn" type="button" @click="resetDefaults">Reset</button>
     </header>
@@ -247,6 +295,76 @@ export default defineComponent({
           <div class="small">
             Edit personality in code (default coach list) or extend the store later.
           </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <header class="engineHead">
+          <div>
+            <h3>YaneuraOu</h3>
+            <div class="small">Applied via USI setoption and engine will reset automatically.</div>
+          </div>
+          <button class="btn" type="button" @click="resetEngineDefaults">Normalize</button>
+        </header>
+
+        <div v-for="def in yaneuraOuOptionDefs" :key="def.name" class="row">
+          <label class="mono">{{ def.name }}</label>
+
+          <template v-if="def.type === 'check'">
+            <input
+              type="checkbox"
+              :checked="Boolean(state.yaneuraOu[def.name])"
+              @change="
+                onEngineCheck(
+                  def.name as keyof YaneuraOuParam,
+                  ($event.target as HTMLInputElement).checked,
+                )
+              "
+            />
+          </template>
+
+          <template v-else-if="def.type === 'string'">
+            <input
+              class="input mono"
+              :value="String(state.yaneuraOu[def.name])"
+              @change="
+                onEngineString(
+                  def.name as keyof YaneuraOuParam,
+                  ($event.target as HTMLInputElement).value,
+                )
+              "
+            />
+          </template>
+
+          <template v-else-if="def.type === 'combo'">
+            <select
+              class="input"
+              :value="String(state.yaneuraOu[def.name])"
+              @change="onEngineCombo(def, ($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="v in def.vars" :key="v" :value="v">{{ v }}</option>
+            </select>
+          </template>
+
+          <template v-else>
+            <input
+              v-if="def.spinKind === 'number'"
+              class="input mono"
+              type="number"
+              :min="Number(def.min)"
+              :max="Number(def.max)"
+              :value="Number(state.yaneuraOu[def.name])"
+              @change="onEngineSpin(def, ($event.target as HTMLInputElement).value)"
+            />
+            <input
+              v-else
+              class="input mono"
+              :value="String(state.yaneuraOu[def.name])"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              @change="onEngineSpin(def, ($event.target as HTMLInputElement).value)"
+            />
+          </template>
         </div>
       </div>
     </div>
@@ -391,5 +509,12 @@ label {
   font-family:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
     monospace;
+}
+
+.engineHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
 }
 </style>
