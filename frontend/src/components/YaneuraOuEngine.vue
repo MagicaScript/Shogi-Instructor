@@ -17,6 +17,7 @@ type Data = {
   cancelLogListener: (() => void) | null
   lastSfenAnalyzed: string
   cancelInfoTap: (() => void) | null
+  logsOpen: boolean
 }
 
 export default defineComponent({
@@ -43,6 +44,7 @@ export default defineComponent({
       cancelLogListener: null,
       lastSfenAnalyzed: '',
       cancelInfoTap: null,
+      logsOpen: false,
     }
   },
 
@@ -85,7 +87,6 @@ export default defineComponent({
   },
 
   methods: {
-    /** Keep log size bounded for UI and memory safety. */
     pushLog(line: string) {
       this.logLines.push(line)
       if (this.logLines.length > 300) this.logLines.splice(0, this.logLines.length - 300)
@@ -166,155 +167,155 @@ export default defineComponent({
 </script>
 
 <template>
-  <section class="engine-card">
+  <div class="engine-card">
     <header class="engine-header">
-      <h2>YaneuraOu Engine</h2>
-
-      <div class="engine-status">
-        <span class="badge" :class="status">{{ status }}</span>
-        <span v-if="errorMsg" class="error">{{ errorMsg }}</span>
-      </div>
+      <h3>YaneuraOu</h3>
+      <span class="badge" :class="status">{{ status }}</span>
     </header>
 
+    <div v-if="errorMsg" class="error">{{ errorMsg }}</div>
+
     <div class="engine-body">
-      <div class="row">
-        <div class="label">SFEN</div>
-        <div class="value mono">{{ sfen || '(empty)' }}</div>
+      <div class="info-row">
+        <span class="info-label">Bestmove</span>
+        <span class="info-value mono">{{ result?.bestmove ?? '-' }}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Score</span>
+        <span class="info-value mono">{{ prettyScore || '-' }}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">PV</span>
+        <span class="info-value mono pv">
+          {{ result?.lastInfo?.pv?.length ? result.lastInfo.pv.join(' ') : '-' }}
+        </span>
       </div>
 
-      <div class="row">
-        <div class="label">Bestmove</div>
-        <div class="value mono">{{ result?.bestmove ?? '-' }}</div>
-      </div>
-
-      <div class="row">
-        <div class="label">Ponder</div>
-        <div class="value mono">{{ result?.ponder ?? '-' }}</div>
-      </div>
-
-      <div class="row">
-        <div class="label">Score</div>
-        <div class="value mono">{{ prettyScore || '-' }}</div>
-      </div>
-
-      <div class="row">
-        <div class="label">PV</div>
-        <div class="value mono">
-          <span v-if="result?.lastInfo?.pv?.length">{{ result.lastInfo.pv.join(' ') }}</span>
-          <span v-else>-</span>
+      <div class="logs-section">
+        <button class="logs-toggle" type="button" @click="logsOpen = !logsOpen">
+          {{ logsOpen ? 'Hide' : 'Show' }} logs ({{ logLines.length }})
+        </button>
+        <div v-if="logsOpen" class="logs mono">
+          <div v-for="(l, i) in logLines" :key="i" class="log-line">{{ l }}</div>
         </div>
-      </div>
-
-      <div class="row">
-        <div class="label">Logs</div>
-        <div class="value">
-          <div class="log mono">
-            <div v-for="(l, i) in logLines" :key="i">{{ l }}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="hint" v-if="!canAnalyze">
-        Engine will analyze automatically when a non-empty SFEN is provided and engine is ready.
       </div>
     </div>
-  </section>
+  </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/styles/design.scss' as *;
+
 .engine-card {
-  width: 980px;
-  max-width: calc(100vw - 48px);
-  border: 1px solid #ddd;
-  border-radius: 14px;
-  padding: 14px 16px;
-  background: #fff;
+  @include card-elevated;
+  padding: $space-md;
 }
 
 .engine-header {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.engine-status {
-  display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: $space-md;
+
+  h3 {
+    font-size: $text-base;
+    font-weight: 600;
+    margin: 0;
+    color: $text-primary;
+  }
 }
 
 .badge {
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-    monospace;
-  font-size: 12px;
-  padding: 2px 10px;
-  border-radius: 999px;
-  border: 1px solid #ccc;
-  color: #333;
-}
+  font-family: $font-mono;
+  font-size: $text-xs;
+  padding: 2px $space-sm;
+  border-radius: $radius-full;
+  border: 1px solid $border-default;
+  color: $text-secondary;
+  text-transform: uppercase;
 
-.badge.loading,
-.badge.analyzing {
-  border-color: #999;
-}
+  &.ready {
+    border-color: $accent-success;
+    color: $accent-success;
+  }
 
-.badge.error {
-  border-color: #b00020;
-  color: #b00020;
+  &.analyzing {
+    border-color: $accent-primary;
+    color: $accent-primary;
+  }
+
+  &.error {
+    border-color: $accent-error;
+    color: $accent-error;
+  }
 }
 
 .error {
-  font-size: 12px;
-  color: #b00020;
-  max-width: 520px;
+  margin-top: $space-sm;
+  font-size: $text-sm;
+  color: $accent-error;
 }
 
 .engine-body {
-  margin-top: 12px;
-  display: grid;
-  gap: 10px;
+  margin-top: $space-md;
+  display: flex;
+  flex-direction: column;
+  gap: $space-sm;
 }
 
-.row {
-  display: grid;
-  grid-template-columns: 90px 1fr;
-  gap: 12px;
-  align-items: start;
+.info-row {
+  display: flex;
+  gap: $space-md;
+  align-items: flex-start;
 }
 
-.label {
-  font-size: 12px;
-  color: #666;
-  padding-top: 3px;
+.info-label {
+  flex: 0 0 70px;
+  font-size: $text-sm;
+  color: $text-muted;
 }
 
-.value {
-  font-size: 13px;
-  color: #111;
-  word-break: break-word;
+.info-value {
+  flex: 1;
+  font-size: $text-sm;
+  color: $text-primary;
+
+  &.pv {
+    word-break: break-all;
+  }
 }
 
 .mono {
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-    monospace;
+  font-family: $font-mono;
 }
 
-.log {
-  border: 1px solid #eee;
-  border-radius: 10px;
-  padding: 8px 10px;
-  max-height: 220px;
-  overflow: auto;
-  background: #fafafa;
-  font-size: 12px;
-  line-height: 1.35;
+.logs-section {
+  margin-top: $space-sm;
 }
 
-.hint {
-  font-size: 12px;
-  color: #666;
+.logs-toggle {
+  @include button-base;
+  font-size: $text-sm;
+  padding: $space-xs $space-md;
+}
+
+.logs {
+  margin-top: $space-sm;
+  max-height: 200px;
+  overflow-y: auto;
+  background: $bg-base;
+  border-radius: $radius-md;
+  padding: $space-sm $space-md;
+  font-size: $text-xs;
+  line-height: $line-height-normal;
+  @include scrollbar;
+}
+
+.log-line {
+  color: $text-secondary;
+
+  &:hover {
+    color: $text-primary;
+  }
 }
 </style>

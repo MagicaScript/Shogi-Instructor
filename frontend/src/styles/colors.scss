@@ -1,18 +1,2 @@
-/* _colors.scss */
-
-// Board Colors
-$board-bg: #eeb558;
-$board-line: #5c4033;
-
-// Piece Colors
-$piece-bg: #f5deb3;
-$piece-text: #000;
-$piece-shadow: rgba(0, 0, 0, 0.2);
-$piece-selected: #ff4500;
-
-// Komadai (Stand) Colors
-$komadai-bg: #d2b48c;
-$komadai-border: #8b4513;
-
-// General
-$text-main: #333;
+/* colors.scss - Re-exports from design system for backward compatibility */
+@forward './design.scss';

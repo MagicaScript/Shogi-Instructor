@@ -15,7 +15,7 @@
         @click="selectPiece(piece)"
       >
         <ShogiPiece :label="piece.label" :is-opponent="isOpponent" />
-        <span v-if="piece.count > 1" class="piece-count">x{{ piece.count }}</span>
+        <span v-if="piece.count > 1" class="piece-count">{{ piece.count }}</span>
       </div>
     </div>
   </div>
@@ -38,9 +38,6 @@ export interface PieceSelectedPayload {
   owner: PlayerOwner
 }
 
-/**
- * ShogiKomadai (Piece Stand) Component.
- */
 export default defineComponent({
   name: 'ShogiKomadai',
   components: { ShogiPiece },
@@ -64,7 +61,6 @@ export default defineComponent({
     selectPiece(piece: KomadaiPiece) {
       const payload: PieceSelectedPayload = { piece, owner: this.currentOwner }
       this.$emit('piece-selected', payload)
-      // also allow click-to-preview drop targets
       this.$emit('komadai-drag-start', payload)
     },
 
@@ -92,54 +88,78 @@ export default defineComponent({
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/colors.scss' as *;
+@use '@/styles/design.scss' as *;
 
 .shogi-komadai {
-  background-color: $komadai-bg;
-  border: 4px solid $komadai-border;
-  padding: 10px;
-  width: 120px;
-  min-height: 300px;
+  background: $komadai-bg;
+  border: 3px solid $komadai-border;
+  border-radius: $radius-lg;
+  padding: $space-md;
+  width: 450px;
+  min-height: auto;
   display: flex;
   flex-direction: column;
 
   &.is-top {
     order: -1;
   }
+
+  @media (max-width: $breakpoint-md) {
+    width: 315px;
+    padding: $space-sm;
+  }
 }
 
 .komadai-header {
   text-align: center;
-  font-weight: bold;
-  margin-bottom: 10px;
+  font-weight: 600;
+  font-size: $text-sm;
+  margin-bottom: $space-sm;
   color: $board-line;
 }
 
 .komadai-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: $space-xs;
   justify-content: center;
+  align-content: flex-start;
 }
 
 .komadai-cell {
-  width: 40px;
-  height: 45px;
+  width: 36px;
+  height: 40px;
   position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
   cursor: grab;
+  transition: transform $transition-fast;
+
+  &:hover {
+    transform: scale(1.08);
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  @media (max-width: $breakpoint-md) {
+    width: 30px;
+    height: 34px;
+  }
 }
 
 .piece-count {
   position: absolute;
-  bottom: -5px;
-  right: -5px;
-  background: white;
-  border-radius: 50%;
-  padding: 2px 4px;
-  font-size: 0.7em;
-  border: 1px solid #333;
+  bottom: -4px;
+  right: -4px;
+  background: $bg-elevated;
+  color: $text-primary;
+  border-radius: $radius-full;
+  padding: 1px 5px;
+  font-size: $text-xs;
+  font-weight: 600;
+  border: 1px solid $border-default;
 }
 </style>

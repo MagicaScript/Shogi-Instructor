@@ -1,23 +1,27 @@
 <template>
   <div class="shogi-game-shell">
     <div class="shogi-game-container" :class="{ readonly: syncEnabled }">
-      <ShogiKomadai
-        :pieces="opponentKomadai"
-        :is-opponent="true"
-        @komadai-drag-start="handleKomadaiDragStart"
-        @komadai-drag-end="handleKomadaiDragEnd"
-      />
+      <div class="komadai-row">
+        <ShogiKomadai
+          :pieces="opponentKomadai"
+          :is-opponent="true"
+          @komadai-drag-start="handleKomadaiDragStart"
+          @komadai-drag-end="handleKomadaiDragEnd"
+        />
+      </div>
 
-      <div class="board-area">
+      <div class="board-row">
         <ShogiBoard ref="boardRef" @piece-move="handlePieceMove" @piece-drop="handlePieceDrop" />
       </div>
 
-      <ShogiKomadai
-        :pieces="myKomadai"
-        :is-opponent="false"
-        @komadai-drag-start="handleKomadaiDragStart"
-        @komadai-drag-end="handleKomadaiDragEnd"
-      />
+      <div class="komadai-row">
+        <ShogiKomadai
+          :pieces="myKomadai"
+          :is-opponent="false"
+          @komadai-drag-start="handleKomadaiDragStart"
+          @komadai-drag-end="handleKomadaiDragEnd"
+        />
+      </div>
     </div>
 
     <div class="game-meta">
@@ -380,42 +384,52 @@ export default defineComponent({
 })
 </script>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/styles/design.scss' as *;
+
 .shogi-game-shell {
   position: relative;
 }
 
 .shogi-game-container {
   display: flex;
-  gap: 20px;
+  flex-direction: column;
+  gap: $space-md;
+  align-items: center;
+  padding: $space-md;
+}
+
+.komadai-row,
+.board-row {
+  width: 100%;
+  display: flex;
   justify-content: center;
-  padding: 20px;
 }
 
 .game-meta {
   display: flex;
   justify-content: center;
-  padding: 0 20px 8px;
+  padding: 0 $space-lg $space-sm;
 }
 
 .meta-item {
   display: inline-flex;
-  gap: 10px;
+  gap: $space-sm;
   align-items: center;
-  border: 1px solid #eee;
-  background: #fafafa;
-  border-radius: 999px;
-  padding: 6px 10px;
-  font-size: 12px;
+  border: 1px solid $border-default;
+  background: $bg-elevated;
+  border-radius: $radius-full;
+  padding: $space-xs $space-md;
+  font-size: $text-sm;
 }
 
 .meta-label {
-  color: #666;
+  color: $text-muted;
 }
 
 .meta-value {
-  color: #111;
-  font-weight: 700;
+  color: $accent-primary;
+  font-weight: 600;
 }
 
 .sync-overlay {
@@ -423,28 +437,25 @@ export default defineComponent({
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(2px);
+  background: rgba($bg-base, 0.85);
+  backdrop-filter: blur(4px);
 }
 
 .sync-overlay-card {
-  border: 1px solid #ddd;
-  background: #fff;
-  border-radius: 12px;
-  padding: 14px 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  @include card-elevated;
+  padding: $space-lg;
   text-align: center;
 }
 
 .sync-title {
-  font-weight: 700;
-  color: #111;
+  font-weight: 600;
+  color: $text-primary;
 }
 
 .sync-error {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #b00020;
-  max-width: 420px;
+  margin-top: $space-sm;
+  font-size: $text-sm;
+  color: $accent-error;
+  max-width: 400px;
 }
 </style>

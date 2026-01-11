@@ -200,40 +200,10 @@ export default defineComponent({
   </section>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/styles/design.scss' as *;
+
 .gemini-service {
-  border: 1px solid #eee;
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: #fafafa;
-}
-
-.row {
-  display: grid;
-  grid-template-columns: 70px 1fr;
-  gap: 10px;
-  align-items: center;
-}
-
-.label {
-  font-size: 12px;
-  color: #666;
-}
-
-.value {
-  font-size: 12px;
-  color: #111;
-}
-
-.err {
-  color: #b00020;
-}
-
-.ok {
-  color: #167a3a;
-}
-
-.muted {
-  color: #777;
+  display: none;
 }
 </style>

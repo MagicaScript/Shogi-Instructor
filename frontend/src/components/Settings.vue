@@ -22,6 +22,10 @@ type Data = {
   apiKeyPresent: boolean
   saveMessage: string
   coaches: readonly CoachProfile[]
+  geminiOpen: boolean
+  languageOpen: boolean
+  coachOpen: boolean
+  engineOpen: boolean
 }
 
 function isNonEmptyString(v: unknown): v is string {
@@ -38,6 +42,10 @@ export default defineComponent({
       apiKeyPresent: settingsStore.getGeminiApiKey() !== null,
       saveMessage: '',
       coaches: settingsStore.getCoaches(),
+      geminiOpen: false,
+      languageOpen: false,
+      coachOpen: true,
+      engineOpen: false,
     }
   },
 
@@ -107,7 +115,7 @@ export default defineComponent({
       settingsStore.setGeminiApiKey(k)
       this.apiKeyInput = ''
       this.apiKeyPresent = true
-      this.flash('API Key saved in cookies.')
+      this.flash('API Key saved.')
     },
 
     clearApiKey() {
@@ -178,93 +186,27 @@ export default defineComponent({
 </script>
 
 <template>
-  <section class="settings">
-    <header class="head">
-      <div>
-        <h2>Settings</h2>
-        <div class="hint">Gemini config, coach preferences, and engine parameters.</div>
-      </div>
-      <button class="btn" type="button" @click="resetDefaults">Reset</button>
-    </header>
+  <div class="settings">
+    <div v-if="saveMessage" class="toast">{{ saveMessage }}</div>
 
-    <div class="grid">
-      <div class="card">
-        <h3>Gemini API</h3>
-
-        <div class="row">
-          <label>Base URL</label>
-          <input
-            class="input mono"
-            :value="state.geminiBaseUrl"
-            placeholder="https://generativelanguage.googleapis.com"
-            @change="onChangeBaseUrl(($event.target as HTMLInputElement).value)"
-          />
-        </div>
-
-        <div class="row">
-          <label>Model Name</label>
-          <input
-            class="input mono"
-            :value="state.geminiModelName"
-            placeholder="gemini-3-flash-preview"
-            @change="onChangeModelName(($event.target as HTMLInputElement).value)"
-          />
-        </div>
-
-        <div class="row">
-          <label>API Key (Cookie)</label>
-          <div class="inline">
-            <input
-              class="input mono"
-              type="password"
-              v-model="apiKeyInput"
-              placeholder="Paste API key here"
-              autocomplete="off"
-            />
-            <button class="btn" type="button" @click="saveApiKey">Save</button>
-            <button class="btn danger" type="button" @click="clearApiKey">Clear</button>
-          </div>
-          <div class="small">
-            Status:
-            <span :class="apiKeyPresent ? 'ok' : 'bad'">
-              {{ apiKeyPresent ? 'Key present' : 'Key missing' }}
-            </span>
-          </div>
-        </div>
-
-        <div v-if="saveMessage" class="toast">{{ saveMessage }}</div>
-      </div>
-
-      <div class="card">
-        <h3>Language</h3>
-
-        <div class="row">
-          <label>Text Language</label>
-          <select
-            class="input"
-            :value="state.textLanguage"
-            @change="onChangeTextLanguage(($event.target as HTMLSelectElement).value)"
-          >
-            <option v-for="l in textLanguages" :key="l" :value="l">{{ l }}</option>
-          </select>
-        </div>
-
-        <div class="row">
-          <label>Audio Language</label>
-          <select
-            class="input"
-            :value="state.audioLanguage"
-            @change="onChangeAudioLanguage(($event.target as HTMLSelectElement).value)"
-          >
-            <option v-for="l in textLanguages" :key="l" :value="l">{{ l }}</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Coach</h3>
-
-        <div class="row">
+    <div class="section">
+      <button class="section-toggle" type="button" @click="coachOpen = !coachOpen">
+        <span>Coach</span>
+        <svg
+          class="chevron"
+          :class="{ open: coachOpen }"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      <div v-show="coachOpen" class="section-body">
+        <div class="field">
           <label>Select Coach</label>
           <select
             class="input"
@@ -275,52 +217,161 @@ export default defineComponent({
           </select>
         </div>
 
-        <div v-if="selectedCoach" class="coachPreview">
-          <img class="avatar" :src="selectedCoach.image" alt="Coach image" />
-          <div class="coachMeta">
-            <div class="coachName">{{ selectedCoach.name }}</div>
-            <div class="small mono">id: {{ selectedCoach.id }}</div>
-            <div class="small">
-              voice: <span class="mono">{{ selectedCoach.voice }}</span>
-            </div>
-            <div class="small">
-              default language: <span class="mono">{{ selectedCoach.language }}</span>
-            </div>
+        <div v-if="selectedCoach" class="coach-preview">
+          <img class="avatar" :src="selectedCoach.image" alt="Coach" />
+          <div class="coach-info">
+            <div class="coach-name">{{ selectedCoach.name }}</div>
+            <div class="coach-meta">{{ selectedCoach.language }} · {{ selectedCoach.voice }}</div>
           </div>
         </div>
 
-        <div v-if="selectedCoach" class="row">
-          <label>Personality Prompt</label>
-          <textarea class="input mono area" :value="selectedCoach.personalityPrompt" readonly />
-          <div class="small">
-            Edit personality in code (default coach list) or extend the store later.
-          </div>
+        <div v-if="selectedCoach" class="field">
+          <label>Personality</label>
+          <div class="personality-text">{{ selectedCoach.personalityPrompt }}</div>
         </div>
       </div>
+    </div>
 
-      <div class="card">
-        <header class="engineHead">
-          <div>
-            <h3>YaneuraOu</h3>
-            <div class="small">Applied via USI setoption and engine will reset automatically.</div>
+    <div class="section">
+      <button class="section-toggle" type="button" @click="languageOpen = !languageOpen">
+        <span>Language</span>
+        <svg
+          class="chevron"
+          :class="{ open: languageOpen }"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      <div v-show="languageOpen" class="section-body">
+        <div class="field">
+          <label>Text Language</label>
+          <select
+            class="input"
+            :value="state.textLanguage"
+            @change="onChangeTextLanguage(($event.target as HTMLSelectElement).value)"
+          >
+            <option v-for="l in textLanguages" :key="l" :value="l">{{ l }}</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Audio Language</label>
+          <select
+            class="input"
+            :value="state.audioLanguage"
+            @change="onChangeAudioLanguage(($event.target as HTMLSelectElement).value)"
+          >
+            <option v-for="l in textLanguages" :key="l" :value="l">{{ l }}</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <button class="section-toggle" type="button" @click="geminiOpen = !geminiOpen">
+        <span>Gemini API</span>
+        <svg
+          class="chevron"
+          :class="{ open: geminiOpen }"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      <div v-show="geminiOpen" class="section-body">
+        <div class="field">
+          <label>Base URL</label>
+          <input
+            class="input mono"
+            :value="state.geminiBaseUrl"
+            placeholder="https://generativelanguage.googleapis.com"
+            @change="onChangeBaseUrl(($event.target as HTMLInputElement).value)"
+          />
+        </div>
+
+        <div class="field">
+          <label>Model Name</label>
+          <input
+            class="input mono"
+            :value="state.geminiModelName"
+            placeholder="gemini-3-flash-preview"
+            @change="onChangeModelName(($event.target as HTMLInputElement).value)"
+          />
+        </div>
+
+        <div class="field">
+          <label>API Key</label>
+          <div class="key-row">
+            <input
+              class="input mono"
+              type="password"
+              v-model="apiKeyInput"
+              placeholder="Paste API key"
+              autocomplete="off"
+            />
+            <button class="btn" type="button" @click="saveApiKey">Save</button>
           </div>
-          <button class="btn" type="button" @click="resetEngineDefaults">Reset Engine</button>
-        </header>
+          <div class="key-status" :class="{ ok: apiKeyPresent }">
+            {{ apiKeyPresent ? '✓ Key present' : '✗ Key missing' }}
+          </div>
+          <button v-if="apiKeyPresent" class="btn danger" type="button" @click="clearApiKey">
+            Clear Key
+          </button>
+        </div>
 
-        <div v-for="def in yaneuraOuOptionDefs" :key="def.name" class="row">
+        <button class="btn" type="button" @click="resetDefaults">Reset Defaults</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <button class="section-toggle" type="button" @click="engineOpen = !engineOpen">
+        <span>YaneuraOu Engine</span>
+        <svg
+          class="chevron"
+          :class="{ open: engineOpen }"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      <div v-show="engineOpen" class="section-body">
+        <div class="engine-actions">
+          <button class="btn" type="button" @click="resetEngineDefaults">Reset Engine</button>
+        </div>
+
+        <div v-for="def in yaneuraOuOptionDefs" :key="def.name" class="field">
           <label class="mono">{{ def.name }}</label>
 
           <template v-if="def.type === 'check'">
-            <input
-              type="checkbox"
-              :checked="Boolean(state.yaneuraOu[def.name])"
-              @change="
-                onEngineCheck(
-                  def.name as keyof YaneuraOuParam,
-                  ($event.target as HTMLInputElement).checked,
-                )
-              "
-            />
+            <label class="switch">
+              <input
+                type="checkbox"
+                :checked="Boolean(state.yaneuraOu[def.name])"
+                @change="
+                  onEngineCheck(
+                    def.name as keyof YaneuraOuParam,
+                    ($event.target as HTMLInputElement).checked,
+                  )
+                "
+              />
+              <span class="slider"></span>
+            </label>
           </template>
 
           <template v-else-if="def.type === 'string'">
@@ -368,153 +419,204 @@ export default defineComponent({
         </div>
       </div>
     </div>
-  </section>
+  </div>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/styles/design.scss' as *;
+
 .settings {
-  width: 980px;
-  max-width: calc(100vw - 48px);
-  margin-top: 14px;
-  border: 1px solid #ddd;
-  border-radius: 14px;
-  background: #fff;
-  padding: 14px 16px;
-}
-
-.head {
+  padding: $space-lg;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.hint {
-  margin-top: 2px;
-  color: #666;
-  font-size: 12px;
-}
-
-.grid {
-  margin-top: 12px;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-}
-
-@media (min-width: 980px) {
-  .grid {
-    grid-template-columns: 1.2fr 0.8fr;
-  }
-}
-
-.card {
-  border: 1px solid #eee;
-  border-radius: 12px;
-  padding: 12px;
-  background: #fafafa;
-}
-
-.row {
-  margin-top: 10px;
-  display: grid;
-  gap: 6px;
-}
-
-label {
-  font-size: 12px;
-  color: #555;
-}
-
-.input {
-  width: 100%;
-  border: 1px solid #ddd;
-  border-radius: 10px;
-  padding: 8px 10px;
-  font-size: 13px;
-  background: #fff;
-}
-
-.area {
-  min-height: 84px;
-  resize: vertical;
-}
-
-.inline {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.btn {
-  border: 1px solid #ddd;
-  background: #fff;
-  border-radius: 10px;
-  padding: 8px 10px;
-  font-size: 13px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.btn:hover {
-  background: #f3f3f3;
-}
-
-.btn.danger {
-  border-color: #f0c0c0;
-  color: #9a1a1a;
-}
-
-.small {
-  font-size: 12px;
-  color: #666;
-}
-
-.ok {
-  color: #167a3a;
-}
-
-.bad {
-  color: #b00020;
+  flex-direction: column;
+  gap: $space-md;
 }
 
 .toast {
-  margin-top: 10px;
-  font-size: 12px;
-  color: #111;
+  padding: $space-sm $space-md;
+  background: $accent-success;
+  color: $text-on-accent;
+  border-radius: $radius-md;
+  font-size: $text-sm;
+  text-align: center;
 }
 
-.coachPreview {
-  margin-top: 10px;
+.section {
+  background: $bg-elevated;
+  border: 1px solid $border-subtle;
+  border-radius: $radius-lg;
+  overflow: hidden;
+}
+
+.section-toggle {
   display: flex;
-  gap: 10px;
   align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: $space-md $space-lg;
+  background: transparent;
+  border: none;
+  color: $text-primary;
+  font-size: $text-base;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background $transition-fast;
+
+  &:hover {
+    background: $bg-hover;
+  }
 }
 
-.avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  border: 1px solid #eee;
-  object-fit: cover;
-  background: #fff;
+.chevron {
+  color: $text-muted;
+  transition: transform $transition-base;
+
+  &.open {
+    transform: rotate(180deg);
+  }
 }
 
-.coachName {
-  font-weight: 600;
-  font-size: 13px;
+.section-body {
+  padding: $space-lg;
+  padding-top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $space-md;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: $space-xs;
+
+  label {
+    font-size: $text-sm;
+    color: $text-secondary;
+  }
+}
+
+.input {
+  @include input-base;
 }
 
 .mono {
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-    monospace;
+  font-family: $font-mono;
 }
 
-.engineHead {
+.btn {
+  @include button-base;
+
+  &.danger {
+    border-color: $accent-error;
+    color: $accent-error;
+
+    &:hover {
+      background: rgba($accent-error, 0.1);
+    }
+  }
+}
+
+.coach-preview {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: center;
+  gap: $space-md;
+  padding: $space-md;
+  background: $bg-base;
+  border-radius: $radius-md;
+}
+
+.avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: $radius-md;
+  object-fit: cover;
+  background: $bg-elevated;
+}
+
+.coach-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.coach-name {
+  font-weight: 600;
+  color: $text-primary;
+}
+
+.coach-meta {
+  font-size: $text-sm;
+  color: $text-muted;
+}
+
+.personality-text {
+  font-size: $text-sm;
+  color: $text-secondary;
+  line-height: $line-height-relaxed;
+  padding: $space-md;
+  background: $bg-base;
+  border-radius: $radius-md;
+}
+
+.key-row {
+  display: flex;
+  gap: $space-sm;
+}
+
+.key-status {
+  font-size: $text-sm;
+  color: $accent-error;
+
+  &.ok {
+    color: $accent-success;
+  }
+}
+
+.engine-actions {
+  margin-bottom: $space-sm;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+
+  input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+}
+
+.slider {
+  position: absolute;
+  inset: 0;
+  background: $bg-base;
+  border-radius: $radius-full;
+  cursor: pointer;
+  transition: background $transition-fast;
+
+  &::before {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    left: 3px;
+    bottom: 3px;
+    background: $text-muted;
+    border-radius: 50%;
+    transition:
+      transform $transition-fast,
+      background $transition-fast;
+  }
+
+  input:checked + & {
+    background: rgba($accent-primary, 0.3);
+
+    &::before {
+      background: $accent-primary;
+      transform: translateX(20px);
+    }
+  }
 }
 </style>

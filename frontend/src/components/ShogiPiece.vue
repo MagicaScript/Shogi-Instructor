@@ -5,7 +5,6 @@
     :style="pieceStyle"
     @click="onClick"
   >
-    <!-- Placeholder for piece content -->
     <span class="piece-label">{{ label }}</span>
   </div>
 </template>
@@ -22,10 +21,6 @@ function getScaleByLabel(label: string): number {
   return 1
 }
 
-/**
- * Component representing a single Shogi piece.
- * Now supports visual cues for dragging.
- */
 export default defineComponent({
   name: 'ShogiPiece',
   props: {
@@ -50,34 +45,42 @@ export default defineComponent({
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/colors.scss' as *;
+@use '@/styles/design.scss' as *;
 
 .shogi-piece {
   width: 90%;
   height: 90%;
-  background-color: $piece-bg;
+  background: $piece-bg;
   color: $piece-text;
-
   display: flex;
   align-items: center;
   justify-content: center;
-
   clip-path: polygon(50% 0%, 83% 15%, 95% 100%, 5% 100%, 17% 15%);
-  box-shadow: 2px 2px 2px $piece-shadow;
-  font-weight: bold;
-  font-size: 1.2em;
-  transition: transform 0.2s;
+  box-shadow: $shadow-sm;
+  font-weight: 700;
+  font-size: 1.15em;
+  transition:
+    transform $transition-fast,
+    box-shadow $transition-fast;
   transform: rotate(var(--piece-rotate, 0deg)) scale(var(--piece-scale, 1));
-
-  // Set cursor to indicate draggable items
   cursor: grab;
+  user-select: none;
 
   &.is-promoted {
-    color: red;
+    color: $piece-promoted;
+  }
+
+  &:hover {
+    box-shadow: $shadow-md;
+    transform: rotate(var(--piece-rotate, 0deg)) scale(calc(var(--piece-scale, 1) * 1.05));
   }
 
   &:active {
     cursor: grabbing;
   }
+}
+
+.piece-label {
+  pointer-events: none;
 }
 </style>

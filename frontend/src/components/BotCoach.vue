@@ -45,6 +45,8 @@ type Data = {
   historyCells: Record<number, HistoryCell>
   nextHistoryId: number
   pendingHistoryId: Record<HistoryItem['source'], number | null>
+  playerMetaOpen: boolean
+  opponentMetaOpen: boolean
 }
 
 export default defineComponent({
@@ -77,6 +79,8 @@ export default defineComponent({
       historyCells: {},
       nextHistoryId: 1,
       pendingHistoryId: { player: null, opponent: null },
+      playerMetaOpen: false,
+      opponentMetaOpen: false,
     }
   },
 
@@ -231,6 +235,14 @@ export default defineComponent({
     toggleHistory() {
       this.historyOpen = !this.historyOpen
       void this.$nextTick(() => this.scrollHistoryToBottom())
+    },
+
+    togglePlayerMeta() {
+      this.playerMetaOpen = !this.playerMetaOpen
+    },
+
+    toggleOpponentMeta() {
+      this.opponentMetaOpen = !this.opponentMetaOpen
     },
 
     historyStatus(id: number): HistoryCell['status'] {
@@ -404,240 +416,290 @@ export default defineComponent({
       />
 
       <div class="player-meta">
-        <div class="row">
-          <div class="label">SFEN (after Player move)</div>
-          <div class="value mono">{{ playerMeta?.sfen ?? '-' }}</div>
-        </div>
-        <div class="row">
-          <div class="label">BestMoveForOpponents</div>
-          <div class="value mono">{{ playerMeta?.bestmove ?? '-' }}</div>
-        </div>
-        <div class="row">
-          <div class="label">Ponder</div>
-          <div class="value mono">{{ playerMeta?.ponder ?? '-' }}</div>
-        </div>
-        <div class="row">
-          <div class="label">PV</div>
-          <div class="value mono">
-            {{ playerMeta?.pv?.length ? playerMeta.pv.join(' ') : '-' }}
+        <button class="meta-toggle" type="button" @click="togglePlayerMeta">
+          <span>Player meta</span>
+          <svg
+            class="chevron"
+            :class="{ open: playerMetaOpen }"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+
+        <div v-show="playerMetaOpen" class="meta-body">
+          <div class="row">
+            <div class="label">SFEN (after Player move)</div>
+            <div class="value mono">{{ playerMeta?.sfen ?? '-' }}</div>
           </div>
-        </div>
-        <div class="row">
-          <div class="label">EngineEvalForOpponents</div>
-          <div class="value mono">{{ playerMeta ? formatEval(playerMeta.score) : '-' }}</div>
+          <div class="row">
+            <div class="label">BestMoveForOpponents</div>
+            <div class="value mono">{{ playerMeta?.bestmove ?? '-' }}</div>
+          </div>
+          <div class="row">
+            <div class="label">Ponder</div>
+            <div class="value mono">{{ playerMeta?.ponder ?? '-' }}</div>
+          </div>
+          <div class="row">
+            <div class="label">PV</div>
+            <div class="value mono">
+              {{ playerMeta?.pv?.length ? playerMeta.pv.join(' ') : '-' }}
+            </div>
+          </div>
+          <div class="row">
+            <div class="label">EngineEvalForOpponents</div>
+            <div class="value mono">{{ playerMeta ? formatEval(playerMeta.score) : '-' }}</div>
+          </div>
         </div>
       </div>
 
       <div class="opponents-meta">
-        <div class="row">
-          <div class="label">SFEN (after Opponent move)</div>
-          <div class="value mono">{{ opponentMeta?.sfen ?? '-' }}</div>
-        </div>
-        <div class="row">
-          <div class="label">BestMoveForPlayer</div>
-          <div class="value mono">{{ opponentMeta?.bestmove ?? '-' }}</div>
-        </div>
-        <div class="row">
-          <div class="label">Ponder</div>
-          <div class="value mono">{{ opponentMeta?.ponder ?? '-' }}</div>
-        </div>
-        <div class="row">
-          <div class="label">PV</div>
-          <div class="value mono">
-            {{ opponentMeta?.pv?.length ? opponentMeta.pv.join(' ') : '-' }}
+        <button class="meta-toggle" type="button" @click="toggleOpponentMeta">
+          <span>Opponent meta</span>
+          <svg
+            class="chevron"
+            :class="{ open: opponentMetaOpen }"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+
+        <div v-show="opponentMetaOpen" class="meta-body">
+          <div class="row">
+            <div class="label">SFEN (after Opponent move)</div>
+            <div class="value mono">{{ opponentMeta?.sfen ?? '-' }}</div>
           </div>
-        </div>
-        <div class="row">
-          <div class="label">EngineEvalForPlayer</div>
-          <div class="value mono">{{ opponentMeta ? formatEval(opponentMeta.score) : '-' }}</div>
+          <div class="row">
+            <div class="label">BestMoveForPlayer</div>
+            <div class="value mono">{{ opponentMeta?.bestmove ?? '-' }}</div>
+          </div>
+          <div class="row">
+            <div class="label">Ponder</div>
+            <div class="value mono">{{ opponentMeta?.ponder ?? '-' }}</div>
+          </div>
+          <div class="row">
+            <div class="label">PV</div>
+            <div class="value mono">
+              {{ opponentMeta?.pv?.length ? opponentMeta.pv.join(' ') : '-' }}
+            </div>
+          </div>
+          <div class="row">
+            <div class="label">EngineEvalForPlayer</div>
+            <div class="value mono">{{ opponentMeta ? formatEval(opponentMeta.score) : '-' }}</div>
+          </div>
         </div>
       </div>
     </div>
   </section>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/styles/design.scss' as *;
+
 .coach-card {
-  width: 980px;
-  max-width: calc(100vw - 48px);
-  border: 1px solid #ddd;
-  border-radius: 14px;
-  padding: 14px 16px;
-  background: #fff;
-  margin-top: 14px;
+  @include card;
+  padding: $space-lg;
 }
 
 .coach-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: $space-md;
 }
 
 .coach-title {
   display: flex;
-  gap: 12px;
+  gap: $space-md;
   align-items: center;
+
+  h2 {
+    font-size: $text-lg;
+    font-weight: 600;
+    margin: 0;
+    color: $text-primary;
+  }
 }
 
 .avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: $radius-md;
   object-fit: cover;
-  border: 1px solid #eee;
+  background: $bg-elevated;
+  border: 2px solid $border-subtle;
 }
 
 .coach-body {
-  margin-top: 12px;
-  display: grid;
-  gap: 12px;
+  margin-top: $space-lg;
+  display: flex;
+  flex-direction: column;
+  gap: $space-md;
 }
 
 .speech-box {
-  border: 1px solid #eee;
-  border-radius: 12px;
-  background: #fafafa;
-  padding: 10px 12px;
+  @include card-elevated;
+  padding: $space-md;
+}
+
+.speech-title {
+  font-size: $text-sm;
+  color: $text-muted;
+  margin-bottom: $space-sm;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.speech {
+  font-size: $text-base;
+  line-height: $line-height-relaxed;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: $text-primary;
 }
 
 .history-card {
-  border: 1px solid #eee;
-  border-radius: 12px;
-  background: #fafafa;
-  padding: 10px 12px;
+  @include card-elevated;
+  padding: $space-md;
 }
 
 .history-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: $space-md;
 }
 
-.history-toggle {
-  appearance: none;
-  border: 1px solid #ddd;
-  background: #fff;
-  border-radius: 10px;
-  padding: 6px 10px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
+.history-toggle,
 .history-clear {
-  appearance: none;
-  border: 1px solid #ddd;
-  background: #fff;
-  border-radius: 10px;
-  padding: 6px 10px;
-  font-size: 12px;
-  cursor: pointer;
+  @include button-base;
+  font-size: $text-sm;
+  padding: $space-xs $space-md;
 }
 
 .history-clear:disabled {
-  opacity: 0.6;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .history-list {
-  margin-top: 10px;
+  margin-top: $space-md;
   max-height: 240px;
-  overflow: auto;
-  border: 1px solid #eee;
-  background: #fff;
-  border-radius: 10px;
-  padding: 8px 10px;
+  overflow-y: auto;
+  background: $bg-base;
+  border-radius: $radius-md;
+  padding: $space-sm $space-md;
+  @include scrollbar;
 }
 
 .history-item {
-  display: grid;
-  grid-template-columns: 80px 1fr;
-  gap: 10px;
-  padding: 6px 0;
-  border-bottom: 1px dashed #eee;
-}
+  display: flex;
+  gap: $space-md;
+  padding: $space-sm 0;
+  border-bottom: 1px solid $border-subtle;
 
-.history-item:last-child {
-  border-bottom: 0;
+  &:last-child {
+    border-bottom: 0;
+  }
 }
 
 .history-role {
-  color: #666;
-  font-size: 12px;
-  padding-top: 1px;
+  flex: 0 0 70px;
+  color: $text-muted;
+  font-size: $text-sm;
 }
 
 .history-text {
-  font-size: 13px;
+  flex: 1;
+  font-size: $text-sm;
   white-space: pre-wrap;
   word-break: break-word;
-}
+  color: $text-primary;
 
-.history-text.pending {
-  color: #777;
-}
-
-.speech-title {
-  font-size: 12px;
-  color: #666;
-  margin-bottom: 6px;
-}
-
-.speech {
-  font-size: 13px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
+  &.pending {
+    color: $text-muted;
+    font-style: italic;
+  }
 }
 
 .player-meta,
 .opponents-meta {
-  display: grid;
-  gap: 8px;
-  border: 1px solid #eee;
-  border-radius: 12px;
-  background: #fafafa;
-  padding: 10px 12px;
+  @include card-elevated;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: $space-sm;
+  overflow: hidden;
+}
+
+.meta-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: $space-md;
+  background: transparent;
+  border: none;
+  color: $text-primary;
+  cursor: pointer;
+  transition: background $transition-fast;
+
+  &:hover {
+    background: $bg-hover;
+  }
+}
+
+.meta-body {
+  padding: $space-md;
+  border-top: 1px solid $border-subtle;
 }
 
 .row {
-  display: grid;
-  grid-template-columns: 90px 1fr;
-  gap: 12px;
-  align-items: start;
+  display: flex;
+  gap: $space-md;
+  align-items: flex-start;
 }
 
 .label {
-  font-size: 12px;
-  color: #666;
-  padding-top: 3px;
+  flex: 0 0 160px;
+  font-size: $text-sm;
+  color: $text-muted;
 }
 
 .value {
-  font-size: 13px;
-  color: #111;
-  word-break: break-word;
+  flex: 1;
+  font-size: $text-sm;
+  color: $text-primary;
+  word-break: break-all;
 }
 
 .mono {
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
-    monospace;
+  font-family: $font-mono;
 }
 
 .error {
-  margin-top: 2px;
-  font-size: 12px;
-  color: #b00020;
+  font-size: $text-sm;
+  color: $accent-error;
+  margin-bottom: $space-sm;
 }
 
 .status {
-  margin-top: 2px;
-  font-size: 12px;
-  color: #666;
-}
+  font-size: $text-sm;
+  color: $text-muted;
 
-.status.on {
-  color: #111;
+  &.on {
+    color: $accent-primary;
+  }
 }
 </style>

@@ -72,10 +72,6 @@ export interface PieceDropPayload {
 
 type BoardActionCallback = (action: string, payload: CellClickPayload) => void
 
-/**
- * ShogiBoard Component.
- * Renders board, supports drag&drop and legal move highlighting.
- */
 export default defineComponent({
   name: 'ShogiBoard',
   components: { ShogiPieceComponent },
@@ -112,9 +108,6 @@ export default defineComponent({
       this.previewDrop = null
     },
 
-    /**
-     * Show legal drop targets for a komadai piece (called by parent on dragstart/click).
-     */
     previewDropTargets(pieceType: PieceType, owner: PlayerOwner) {
       this.selectedIndex = -1
       this.previewDrop = { pieceType, owner }
@@ -208,7 +201,6 @@ export default defineComponent({
     },
 
     handleCellClick(index: number) {
-      // if currently previewing a drop, clicking board does not select piece (avoid mixed states)
       if (this.previewDrop) {
         this.clearSelection()
         const payload: CellClickPayload = { index, cell: this.cells[index] ?? null }
@@ -234,12 +226,13 @@ export default defineComponent({
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/colors.scss' as *;
+@use '@/styles/design.scss' as *;
 
 .shogi-board {
-  padding: 10px;
-  background-color: $board-bg;
-  border: 5px solid $board-line;
+  padding: $space-md;
+  background: $board-bg;
+  border: 4px solid $board-line;
+  border-radius: $radius-lg;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -252,11 +245,16 @@ export default defineComponent({
   height: 450px;
   border-right: 1px solid $board-line;
   border-bottom: 1px solid $board-line;
+
+  @media (max-width: $breakpoint-md) {
+    width: 315px;
+    height: 315px;
+  }
 }
 
 .board-cell {
-  width: 50px;
-  height: 50px;
+  width: calc(100% / 9);
+  height: calc(100% / 9);
   border-left: 1px solid $board-line;
   border-top: 1px solid $board-line;
   box-sizing: border-box;
@@ -264,30 +262,31 @@ export default defineComponent({
   justify-content: center;
   align-items: center;
   position: relative;
+  transition: background $transition-fast;
 
   &.selected {
-    background-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.25);
   }
 
   &.legal-move {
-    background-color: rgba(46, 204, 113, 0.3);
+    background: rgba($accent-success, 0.25);
     cursor: pointer;
 
     &:hover {
-      background-color: rgba(46, 204, 113, 0.5);
+      background: rgba($accent-success, 0.4);
     }
   }
 
   &.drag-target {
-    background-color: rgba(255, 215, 0, 0.3);
+    background: rgba($accent-warning, 0.3);
   }
 }
 
 .legal-marker {
   width: 12px;
   height: 12px;
-  background-color: rgba(0, 0, 0, 0.2);
-  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: $radius-full;
   pointer-events: none;
 }
 </style>
