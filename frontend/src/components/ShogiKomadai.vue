@@ -46,6 +46,10 @@ export default defineComponent({
       type: Array as PropType<KomadaiPiece[]>,
       default: () => [],
     },
+    owner: {
+      type: String as PropType<PlayerOwner>,
+      default: null,
+    },
     isOpponent: {
       type: Boolean,
       default: false,
@@ -54,7 +58,7 @@ export default defineComponent({
   emits: ['piece-selected', 'komadai-drag-start', 'komadai-drag-end'],
   computed: {
     currentOwner(): PlayerOwner {
-      return this.isOpponent ? 'opponent' : 'self'
+      return this.owner ?? (this.isOpponent ? 'opponent' : 'self')
     },
   },
   methods: {

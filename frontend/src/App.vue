@@ -45,7 +45,10 @@ function closeSettings() {
 <template>
   <div class="app-shell">
     <header class="app-header">
-      <h1 class="app-title">Shogi Instructor</h1>
+      <h1 class="app-title">
+        <span class="app-title-text">Shogi Instructor</span>
+        <span class="beta-badge" aria-label="Beta">Beta</span>
+      </h1>
 
       <div class="header-actions">
         <button class="sync-btn" :class="{ active: syncEnabled }" type="button" @click="toggleSync">
@@ -188,6 +191,24 @@ function closeSettings() {
   font-weight: 600;
   color: $text-primary;
   margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: $space-sm;
+}
+
+.beta-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: $radius-full;
+  background: $accent-success;
+  color: $text-on-accent;
+  font-size: $text-xs;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  line-height: 1.2;
+  border: 1px solid $accent-success;
 }
 
 .header-actions {

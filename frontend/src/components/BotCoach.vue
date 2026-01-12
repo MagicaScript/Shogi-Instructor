@@ -45,8 +45,6 @@ type Data = {
   historyCells: Record<number, HistoryCell>
   nextHistoryId: number
   pendingHistoryId: Record<HistoryItem['source'], number | null>
-  playerMetaOpen: boolean
-  opponentMetaOpen: boolean
 }
 
 export default defineComponent({
@@ -79,8 +77,6 @@ export default defineComponent({
       historyCells: {},
       nextHistoryId: 1,
       pendingHistoryId: { player: null, opponent: null },
-      playerMetaOpen: false,
-      opponentMetaOpen: false,
     }
   },
 
@@ -235,14 +231,6 @@ export default defineComponent({
     toggleHistory() {
       this.historyOpen = !this.historyOpen
       void this.$nextTick(() => this.scrollHistoryToBottom())
-    },
-
-    togglePlayerMeta() {
-      this.playerMetaOpen = !this.playerMetaOpen
-    },
-
-    toggleOpponentMeta() {
-      this.opponentMetaOpen = !this.opponentMetaOpen
     },
 
     historyStatus(id: number): HistoryCell['status'] {
@@ -415,91 +403,62 @@ export default defineComponent({
         @loading="onOpponentGeminiLoading"
       />
 
-      <div class="player-meta">
-        <button class="meta-toggle" type="button" @click="togglePlayerMeta">
-          <span>Player meta</span>
-          <svg
-            class="chevron"
-            :class="{ open: playerMetaOpen }"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-
-        <div v-show="playerMetaOpen" class="meta-body">
-          <div class="row">
-            <div class="label">SFEN (after Player move)</div>
-            <div class="value mono">{{ playerMeta?.sfen ?? '-' }}</div>
-          </div>
-          <div class="row">
-            <div class="label">BestMoveForOpponents</div>
-            <div class="value mono">{{ playerMeta?.bestmove ?? '-' }}</div>
-          </div>
-          <div class="row">
-            <div class="label">Ponder</div>
-            <div class="value mono">{{ playerMeta?.ponder ?? '-' }}</div>
-          </div>
-          <div class="row">
-            <div class="label">PV</div>
-            <div class="value mono">
-              {{ playerMeta?.pv?.length ? playerMeta.pv.join(' ') : '-' }}
+      <details class="meta-panel">
+        <summary class="meta-summary">Engine meta (Player + Opponent)</summary>
+        <div class="meta-content">
+          <div class="player-meta">
+            <div class="row">
+              <div class="label">SFEN (after Player move)</div>
+              <div class="value mono">{{ playerMeta?.sfen ?? '-' }}</div>
+            </div>
+            <div class="row">
+              <div class="label">BestMoveForOpponents</div>
+              <div class="value mono">{{ playerMeta?.bestmove ?? '-' }}</div>
+            </div>
+            <div class="row">
+              <div class="label">Ponder</div>
+              <div class="value mono">{{ playerMeta?.ponder ?? '-' }}</div>
+            </div>
+            <div class="row">
+              <div class="label">PV</div>
+              <div class="value mono">
+                {{ playerMeta?.pv?.length ? playerMeta.pv.join(' ') : '-' }}
+              </div>
+            </div>
+            <div class="row">
+              <div class="label">EngineEvalForOpponents</div>
+              <div class="value mono">{{ playerMeta ? formatEval(playerMeta.score) : '-' }}</div>
             </div>
           </div>
-          <div class="row">
-            <div class="label">EngineEvalForOpponents</div>
-            <div class="value mono">{{ playerMeta ? formatEval(playerMeta.score) : '-' }}</div>
-          </div>
-        </div>
-      </div>
 
-      <div class="opponents-meta">
-        <button class="meta-toggle" type="button" @click="toggleOpponentMeta">
-          <span>Opponent meta</span>
-          <svg
-            class="chevron"
-            :class="{ open: opponentMetaOpen }"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-
-        <div v-show="opponentMetaOpen" class="meta-body">
-          <div class="row">
-            <div class="label">SFEN (after Opponent move)</div>
-            <div class="value mono">{{ opponentMeta?.sfen ?? '-' }}</div>
-          </div>
-          <div class="row">
-            <div class="label">BestMoveForPlayer</div>
-            <div class="value mono">{{ opponentMeta?.bestmove ?? '-' }}</div>
-          </div>
-          <div class="row">
-            <div class="label">Ponder</div>
-            <div class="value mono">{{ opponentMeta?.ponder ?? '-' }}</div>
-          </div>
-          <div class="row">
-            <div class="label">PV</div>
-            <div class="value mono">
-              {{ opponentMeta?.pv?.length ? opponentMeta.pv.join(' ') : '-' }}
+          <div class="opponents-meta">
+            <div class="row">
+              <div class="label">SFEN (after Opponent move)</div>
+              <div class="value mono">{{ opponentMeta?.sfen ?? '-' }}</div>
+            </div>
+            <div class="row">
+              <div class="label">BestMoveForPlayer</div>
+              <div class="value mono">{{ opponentMeta?.bestmove ?? '-' }}</div>
+            </div>
+            <div class="row">
+              <div class="label">Ponder</div>
+              <div class="value mono">{{ opponentMeta?.ponder ?? '-' }}</div>
+            </div>
+            <div class="row">
+              <div class="label">PV</div>
+              <div class="value mono">
+                {{ opponentMeta?.pv?.length ? opponentMeta.pv.join(' ') : '-' }}
+              </div>
+            </div>
+            <div class="row">
+              <div class="label">EngineEvalForPlayer</div>
+              <div class="value mono">
+                {{ opponentMeta ? formatEval(opponentMeta.score) : '-' }}
+              </div>
             </div>
           </div>
-          <div class="row">
-            <div class="label">EngineEvalForPlayer</div>
-            <div class="value mono">{{ opponentMeta ? formatEval(opponentMeta.score) : '-' }}</div>
-          </div>
         </div>
-      </div>
+      </details>
     </div>
   </section>
 </template>
@@ -635,34 +594,48 @@ export default defineComponent({
 
 .player-meta,
 .opponents-meta {
-  @include card-elevated;
-  padding: 0;
   display: flex;
   flex-direction: column;
   gap: $space-sm;
+}
+
+.meta-panel {
+  @include card-elevated;
+  padding: 0;
   overflow: hidden;
 }
 
-.meta-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.meta-summary {
+  @include button-base;
   width: 100%;
-  padding: $space-md;
-  background: transparent;
-  border: none;
-  color: $text-primary;
-  cursor: pointer;
-  transition: background $transition-fast;
-
-  &:hover {
-    background: $bg-hover;
-  }
+  text-align: left;
+  font-size: $text-sm;
+  padding: $space-sm $space-md;
+  list-style: none;
+  background: $bg-elevated;
 }
 
-.meta-body {
+.meta-summary::-webkit-details-marker {
+  display: none;
+}
+
+.meta-panel[open] .meta-summary {
+  border-bottom: 1px solid $border-subtle;
+}
+
+.meta-content {
   padding: $space-md;
-  border-top: 1px solid $border-subtle;
+  display: flex;
+  flex-direction: column;
+  gap: $space-md;
+}
+
+.player-meta,
+.opponents-meta {
+  background: $bg-base;
+  border: 1px solid $border-subtle;
+  border-radius: $radius-md;
+  padding: $space-md;
 }
 
 .row {

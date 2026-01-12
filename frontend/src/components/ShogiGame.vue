@@ -3,7 +3,8 @@
     <div class="shogi-game-container" :class="{ readonly: syncEnabled }">
       <div class="komadai-row">
         <ShogiKomadai
-          :pieces="opponentKomadai"
+          :pieces="playerColor === 'gote' ? myKomadai : opponentKomadai"
+          :owner="playerColor === 'gote' ? 'self' : 'opponent'"
           :is-opponent="true"
           @komadai-drag-start="handleKomadaiDragStart"
           @komadai-drag-end="handleKomadaiDragEnd"
@@ -11,12 +12,18 @@
       </div>
 
       <div class="board-row">
-        <ShogiBoard ref="boardRef" @piece-move="handlePieceMove" @piece-drop="handlePieceDrop" />
+        <ShogiBoard
+          ref="boardRef"
+          :flipped="playerColor === 'gote'"
+          @piece-move="handlePieceMove"
+          @piece-drop="handlePieceDrop"
+        />
       </div>
 
       <div class="komadai-row">
         <ShogiKomadai
-          :pieces="myKomadai"
+          :pieces="playerColor === 'gote' ? opponentKomadai : myKomadai"
+          :owner="playerColor === 'gote' ? 'opponent' : 'self'"
           :is-opponent="false"
           @komadai-drag-start="handleKomadaiDragStart"
           @komadai-drag-end="handleKomadaiDragEnd"

@@ -1,5 +1,5 @@
 <template>
-  <div class="shogi-board">
+  <div class="shogi-board" :class="{ flipped }">
     <div class="board-grid">
       <div
         v-for="(piece, index) in cells"
@@ -76,6 +76,7 @@ export default defineComponent({
   name: 'ShogiBoard',
   components: { ShogiPieceComponent },
   props: {
+    flipped: { type: Boolean, default: false },
     onBoardAction: {
       type: Function as PropType<BoardActionCallback>,
       default: null,
@@ -236,6 +237,11 @@ export default defineComponent({
   display: flex;
   justify-content: center;
   align-items: center;
+  transform-origin: center;
+}
+
+.shogi-board.flipped {
+  transform: rotate(180deg);
 }
 
 .board-grid {
