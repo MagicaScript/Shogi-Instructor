@@ -303,7 +303,7 @@ export class YaneuraOuEngine {
   private readonly recentLinesCap = 400
 
   private cancelSettingsSub: (() => void) | null = null
-  private lastAppliedParams: YaneuraOuParam = { ...YANEURAOU_PARAM_DEFAULTS }
+  private lastAppliedParams: YaneuraOuParam | null = null
   private applyQueue: Promise<void> = Promise.resolve()
 
   /** Subscribe to engine output lines. */
@@ -441,9 +441,13 @@ export class YaneuraOuEngine {
     }
 
     const prev = this.lastAppliedParams
-    if (paramEquals(prev, next)) return
+    if (prev !== null && paramEquals(prev, next)) return
 
-    const changes = diffParams(prev, next)
+    // When prev is null, treat all options as changed (first apply)
+    const changes =
+      prev !== null
+        ? diffParams(prev, next)
+        : YANEURAOU_OPTION_DEFS.map((def) => ({ def, value: next[def.name] }))
     this.lastAppliedParams = { ...next }
 
     this.enqueueApply(async () => {
@@ -585,12 +589,15 @@ export class YaneuraOuEngine {
       for (const cmd of deferredSetOptions) this.post(cmd)
 
       this.bindSettings()
-      this.applyParamsReactive(this.getParamsFromState(settingsStore.getState()))
 
       await this.postAndWait('isready', 'readyok', this.handshakeTimeoutMs)
 
-      this.post('usinewgame')
-      await this.postAndWait('isready', 'readyok', this.handshakeTimeoutMs)
+      // Callback: apply default parameters after engine ready
+      const onReadyCallback = (): void => {
+        this.applyParamsReactive(YANEURAOU_PARAM_DEFAULTS)
+      }
+      onReadyCallback()
+      await this.applyQueue
     })().catch((e) => {
       this.initPromise = null
       throw e
@@ -750,13 +757,15 @@ export class YaneuraOuEngine {
           }
           break
         }
-        case 'pv':
-          if (i >= parts.length - (this.lastAppliedParams.MultiPV - 1)) {
+        case 'pv': {
+          const multiPV = this.lastAppliedParams?.MultiPV ?? YANEURAOU_PARAM_DEFAULTS.MultiPV
+          if (i >= parts.length - (multiPV - 1)) {
             break
           }
           info.pv = parts.slice(i)
           i = parts.length
           break
+        }
         default:
           if (i < parts.length) i += 1
           break

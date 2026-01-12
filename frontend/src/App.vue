@@ -130,7 +130,7 @@ function closeSettings() {
         <div v-show="engineOpen" class="panel-body">
           <YaneuraOuEngine
             :sfen="currentSfen"
-            :depth="14"
+            :depth="16"
             @analysis-update="handleEngineAnalysisUpdate"
           />
         </div>
