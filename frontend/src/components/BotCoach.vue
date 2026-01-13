@@ -9,11 +9,15 @@ import type { GeminiCoachResponse } from '@/logic/geminiService'
 import type { GameInfo, PlayerColor } from '@/schemes/gameInfo'
 import { getSideToMoveFromSfen, oppositeColor } from '@/schemes/gameInfo'
 import { scoreToKey } from '@/schemes/usi'
+import type { MoveHistoryEntry, MoveQuality } from '@/schemes/moveHistory'
+import { computeMoveQualityWithContext, moveQualityLabel } from '@/logic/moveQuality'
+import { normalizeSfen } from '@/schemes/engineAnalysis'
 
 type Props = {
   analysis: EngineAnalysisPayload | null
   avatarSrc?: string
   gameInfo?: GameInfo | null
+  moveHistory?: MoveHistoryEntry[]
 }
 
 type HistoryItem = {
@@ -45,6 +49,12 @@ type Data = {
   historyCells: Record<number, HistoryCell>
   nextHistoryId: number
   pendingHistoryId: Record<HistoryItem['source'], number | null>
+  /** Maps SFEN (normalized) to EngineAnalysisPayload for linking to move history */
+  analysisCache: Map<string, EngineAnalysisPayload>
+  /** Computed move quality for the last player move */
+  playerLastMoveQuality: MoveQuality
+  /** Computed move quality for the last opponent move */
+  opponentLastMoveQuality: MoveQuality
 }
 
 export default defineComponent({
@@ -56,6 +66,7 @@ export default defineComponent({
     analysis: { type: Object as () => Props['analysis'], default: null },
     avatarSrc: { type: String, default: '' },
     gameInfo: { type: Object as () => Props['gameInfo'], default: null },
+    moveHistory: { type: Array as () => MoveHistoryEntry[], default: () => [] },
   },
 
   data(): Data {
@@ -77,6 +88,9 @@ export default defineComponent({
       historyCells: {},
       nextHistoryId: 1,
       pendingHistoryId: { player: null, opponent: null },
+      analysisCache: new Map<string, EngineAnalysisPayload>(),
+      playerLastMoveQuality: 'unknown' as MoveQuality,
+      opponentLastMoveQuality: 'unknown' as MoveQuality,
     }
   },
 
@@ -121,6 +135,14 @@ export default defineComponent({
       deep: true,
       handler() {
         this.updateMetaSnapshots()
+        this.cacheAnalysis()
+        this.updateMoveQualities()
+      },
+    },
+    moveHistory: {
+      deep: true,
+      handler() {
+        this.updateMoveQualities()
       },
     },
   },
@@ -277,6 +299,128 @@ export default defineComponent({
       return scoreToKey(score)
     },
 
+    /**
+     * Caches the current analysis by normalized SFEN for later linking.
+     */
+    cacheAnalysis() {
+      const analysis = this.safeAnalysis
+      if (!analysis) return
+
+      const key = normalizeSfen(analysis.sfen)
+      this.analysisCache.set(key, analysis)
+
+      // Limit cache size to prevent memory leaks
+      if (this.analysisCache.size > 200) {
+        const oldest = this.analysisCache.keys().next().value
+        if (oldest) this.analysisCache.delete(oldest)
+      }
+    },
+
+    /**
+     * Finds the analysis for a given SFEN from the cache.
+     */
+    findAnalysisForSfen(sfen: string): EngineAnalysisPayload | null {
+      const key = normalizeSfen(sfen)
+      return this.analysisCache.get(key) ?? null
+    },
+
+    /**
+     * Links analysis results to move history entries and computes move qualities.
+     *
+     * The key insight:
+     * - When analyzing SFEN at ply=N, the engine's bestmove is the recommendation
+     *   for the side-to-move at that position.
+     * - The move at ply=N+1 was made by that side-to-move.
+     * - So we link the analysis of ply=N's SFEN to the move entry at ply=N+1.
+     */
+    updateMoveQualities() {
+      const playerColor = this.playerColor
+      if (!playerColor) return
+
+      const history = this.moveHistory
+      if (!history || history.length === 0) {
+        this.playerLastMoveQuality = 'unknown'
+        this.opponentLastMoveQuality = 'unknown'
+        return
+      }
+
+      // Find the last player move and last opponent move
+      let lastPlayerEntry: MoveHistoryEntry | null = null
+      let lastOpponentEntry: MoveHistoryEntry | null = null
+      let prevPlayerAnalysis: EngineAnalysisPayload | null = null
+      let prevOpponentAnalysis: EngineAnalysisPayload | null = null
+
+      for (let i = history.length - 1; i >= 0; i--) {
+        const entry = history[i]
+        if (!entry) continue
+
+        const isPlayer = entry.moveBySide === playerColor
+
+        if (isPlayer && !lastPlayerEntry) {
+          lastPlayerEntry = entry
+          // Find analysis for the position BEFORE this move was made
+          // That's the position at ply-1 (the previous entry's sfenAfter)
+          if (i > 0) {
+            const prevEntry = history[i - 1]
+            if (prevEntry) {
+              prevPlayerAnalysis = this.findAnalysisForSfen(prevEntry.sfenAfter)
+            }
+          }
+        } else if (!isPlayer && !lastOpponentEntry) {
+          lastOpponentEntry = entry
+          if (i > 0) {
+            const prevEntry = history[i - 1]
+            if (prevEntry) {
+              prevOpponentAnalysis = this.findAnalysisForSfen(prevEntry.sfenAfter)
+            }
+          }
+        }
+
+        if (lastPlayerEntry && lastOpponentEntry) break
+      }
+
+      // Compute quality for player's last move
+      if (lastPlayerEntry && prevPlayerAnalysis) {
+        // Update the entry with analysis data
+        lastPlayerEntry.recommendedBestMove = prevPlayerAnalysis.bestmove
+        lastPlayerEntry.isOnlyMove = prevPlayerAnalysis.isOnlyMove
+
+        // Find the analysis for AFTER the move (current position)
+        const afterAnalysis = this.findAnalysisForSfen(lastPlayerEntry.sfenAfter)
+        lastPlayerEntry.evalAfterMove = afterAnalysis?.score ?? null
+
+        this.playerLastMoveQuality = computeMoveQualityWithContext(
+          lastPlayerEntry,
+          prevPlayerAnalysis.score,
+        )
+      } else {
+        this.playerLastMoveQuality = 'unknown'
+      }
+
+      // Compute quality for opponent's last move
+      if (lastOpponentEntry && prevOpponentAnalysis) {
+        lastOpponentEntry.recommendedBestMove = prevOpponentAnalysis.bestmove
+        lastOpponentEntry.isOnlyMove = prevOpponentAnalysis.isOnlyMove
+
+        const afterAnalysis = this.findAnalysisForSfen(lastOpponentEntry.sfenAfter)
+        lastOpponentEntry.evalAfterMove = afterAnalysis?.score ?? null
+
+        this.opponentLastMoveQuality = computeMoveQualityWithContext(
+          lastOpponentEntry,
+          prevOpponentAnalysis.score,
+        )
+      } else {
+        this.opponentLastMoveQuality = 'unknown'
+      }
+    },
+
+    /**
+     * Returns a human-readable label for move quality.
+     */
+    formatMoveQuality(quality: MoveQuality): string {
+      return moveQualityLabel(quality)
+    },
+
     onPlayerGeminiResult(out: GeminiCoachResponse) {
       this.playerGeminiError = ''
       this.playerSpeech = out.text
@@ -380,6 +524,7 @@ export default defineComponent({
         :side-last-move="sideLastMoveLabelFor(playerMeta)"
         :side-to-move="sideToMoveLabelFor(playerMeta)"
         :is-only-move="playerMeta.isOnlyMove"
+        :last-move-quality="playerLastMoveQuality"
         position-text="Evaluate the player's last move."
         @result="onPlayerGeminiResult"
         @error="onPlayerGeminiError"
@@ -399,6 +544,7 @@ export default defineComponent({
         :side-last-move="sideLastMoveLabelFor(opponentMeta)"
         :side-to-move="sideToMoveLabelFor(opponentMeta)"
         :is-only-move="opponentMeta.isOnlyMove"
+        :last-move-quality="opponentLastMoveQuality"
         position-text="Explain your last move: purpose, threat, and how the player should respond."
         @result="onOpponentGeminiResult"
         @error="onOpponentGeminiError"

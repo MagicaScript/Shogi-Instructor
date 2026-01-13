@@ -63,6 +63,11 @@ import { calculateLegalMovesOnBoard, calculateLegalDrops } from '@/logic/shogiRu
 import type { GameInfo, PlayerColor } from '@/schemes/gameInfo'
 import { isPlayerColor, isGameInfo } from '@/schemes/gameInfo'
 import { isObject, isNonEmptyString } from '@/utils/typeGuards'
+import {
+  type MoveHistoryEntry,
+  createMoveHistoryEntry,
+  isMoveHistoryEntry,
+} from '@/schemes/moveHistory'
 
 interface ShogiBoardInstance {
   setCell: (index: number, piece: IShogiPiece | null) => void
@@ -102,6 +107,8 @@ export default defineComponent({
   emits: {
     'sfen-change': (sfen: string) => typeof sfen === 'string' && sfen.trim().length > 0,
     'game-info-change': (v: GameInfo) => isGameInfo(v),
+    'move-history-change': (v: MoveHistoryEntry[]) =>
+      Array.isArray(v) && v.every((e) => isMoveHistoryEntry(e)),
   },
   data() {
     return {
@@ -113,6 +120,7 @@ export default defineComponent({
       syncTimer: null as ReturnType<typeof setInterval> | null,
       syncError: '' as string,
       playerColor: null as PlayerColor | null,
+      moveHistory: [] as MoveHistoryEntry[],
     }
   },
   mounted() {
@@ -251,6 +259,36 @@ export default defineComponent({
       return { steps: [], playerColor: null }
     },
 
+    /**
+     * Builds MoveHistoryEntry[] from lishogi steps.
+     * Each step with ply >= 1 corresponds to a move.
+     * ply=0 is the initial position (no move).
+     */
+    buildMoveHistoryFromSteps(steps: LishogiStateItem[]): MoveHistoryEntry[] {
+      const history: MoveHistoryEntry[] = []
+
+      for (const step of steps) {
+        // ply=0 is initial position, no move made
+        if (step.ply < 1) continue
+
+        // Determine which side made this move
+        // After ply=1 (first move), it's gote's turn, so sente made the move
+        // After ply=2 (second move), it's sente's turn, so gote made the move
+        // Pattern: ply is odd -> sente moved, ply is even -> gote moved
+        const moveBySide: PlayerColor = step.ply % 2 === 1 ? 'sente' : 'gote'
+
+        const entry = createMoveHistoryEntry(step.ply, moveBySide, step.usi ?? null, step.sfen)
+
+        history.push(entry)
+      }
+
+      return history
+    },
+
+    emitMoveHistory() {
+      this.$emit('move-history-change', [...this.moveHistory])
+    },
+
     async syncOnce() {
       try {
         const res = await fetch(LISHOGI_STATE_URL, { cache: 'no-store' })
@@ -275,6 +313,10 @@ export default defineComponent({
 
         const derivedMoveNumber = latest.ply + 1
         if (!this.extractMoveNumberFromSFEN(latest.sfen)) this.moveNumber = derivedMoveNumber
+
+        // Build and emit move history from steps
+        this.moveHistory = this.buildMoveHistoryFromSteps(extracted.steps)
+        this.emitMoveHistory()
 
         this.emitCurrentSFEN()
         this.syncError = ''

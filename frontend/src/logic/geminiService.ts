@@ -4,6 +4,8 @@ import { settingsStore, type CoachProfile, type TextLanguage } from '@/schemes/s
 import type { EngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import type { Score } from '@/schemes/usi'
 import { isObject } from '@/utils/typeGuards'
+import type { MoveQuality } from '@/schemes/moveHistory'
+import { moveQualityLabel } from '@/logic/moveQuality'
 
 export type GeminiEmotion = 'happy' | 'neutral' | 'concerned' | 'excited'
 
@@ -38,6 +40,8 @@ export type GeminiBoardContext = {
   isUndo?: boolean
   /** True when only one legal move exists (forced response to check). */
   isOnlyMove?: boolean
+  /** Quality assessment of the last move (best, good, inaccuracy, mistake, blunder, forced, unknown). */
+  lastMoveQuality?: MoveQuality
 }
 
 function isGeminiEmotion(v: unknown): v is GeminiEmotion {
@@ -166,6 +170,42 @@ function buildPrompt(ctx: GeminiCoachContext): string {
   if (b?.isOnlyMove) {
     lines.push('    - FORCED MOVE: This is the ONLY legal move (typically responding to check).')
     lines.push('    - No alternative moves.')
+  }
+
+  // Add move quality information
+  if (b?.lastMoveQuality && b.lastMoveQuality !== 'unknown') {
+    const qualityLabel = moveQualityLabel(b.lastMoveQuality)
+    lines.push(`    - Quality of Last Move: ${qualityLabel}`)
+
+    // Add contextual guidance based on move quality
+    switch (b.lastMoveQuality) {
+      case 'best':
+        lines.push(
+          '    - The last move was the engine-recommended best move. Acknowledge the good play.',
+        )
+        break
+      case 'good':
+        lines.push('    - The last move was solid, close to best. Briefly affirm.')
+        break
+      case 'inaccuracy':
+        lines.push('    - The last move was slightly inaccurate. Gently suggest improvement.')
+        break
+      case 'mistake':
+        lines.push(
+          '    - The last move was a mistake. Explain what went wrong without being harsh.',
+        )
+        break
+      case 'blunder':
+        lines.push(
+          '    - The last move was a serious blunder. Highlight the error clearly but constructively.',
+        )
+        break
+      case 'forced':
+        lines.push(
+          '    - The last move was forced (only legal option). No need to evaluate quality.',
+        )
+        break
+    }
   }
 
   lines.push('')

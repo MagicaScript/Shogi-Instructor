@@ -8,11 +8,13 @@ import type { EngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import { isEngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import type { GameInfo } from '@/schemes/gameInfo'
 import { isGameInfo } from '@/schemes/gameInfo'
+import type { MoveHistoryEntry } from '@/schemes/moveHistory'
 
 const syncEnabled = ref(false)
 const currentSfen = ref('')
 const engineAnalysis = ref<EngineAnalysisPayload | null>(null)
 const gameInfo = ref<GameInfo | null>(null)
+const moveHistory = ref<MoveHistoryEntry[]>([])
 
 const settingsOpen = ref(false)
 const engineOpen = ref(false)
@@ -35,6 +37,10 @@ function handleGameInfoChange(next: GameInfo) {
 function handleEngineAnalysisUpdate(payload: EngineAnalysisPayload) {
   if (!isEngineAnalysisPayload(payload)) return
   engineAnalysis.value = payload
+}
+
+function handleMoveHistoryChange(history: MoveHistoryEntry[]) {
+  moveHistory.value = history
 }
 
 function closeSettings() {
@@ -102,12 +108,13 @@ function closeSettings() {
               :sync-enabled="syncEnabled"
               @sfen-change="handleSfenChange"
               @game-info-change="handleGameInfoChange"
+              @move-history-change="handleMoveHistoryChange"
             />
           </div>
         </section>
 
         <section class="panel coach-panel">
-          <BotCoach :analysis="engineAnalysis" :game-info="gameInfo" />
+          <BotCoach :analysis="engineAnalysis" :game-info="gameInfo" :move-history="moveHistory" />
         </section>
       </div>
 
@@ -130,7 +137,7 @@ function closeSettings() {
         <div v-show="engineOpen" class="panel-body">
           <YaneuraOuEngine
             :sfen="currentSfen"
-            :depth="18"
+            :depth="16"
             @analysis-update="handleEngineAnalysisUpdate"
           />
         </div>

@@ -9,6 +9,8 @@ import {
   type GeminiCoachResponse,
 } from '@/logic/geminiService'
 import { isNonEmptyString } from '@/utils/typeGuards'
+import type { MoveQuality } from '@/schemes/moveHistory'
+import { isMoveQuality } from '@/schemes/moveHistory'
 
 type Props = {
   analysis: EngineAnalysisPayload | null
@@ -25,6 +27,7 @@ type Props = {
   positionText?: string
   isUndo?: boolean
   isOnlyMove?: boolean
+  lastMoveQuality?: MoveQuality
 }
 
 type Data = {
@@ -73,6 +76,7 @@ export default defineComponent({
     positionText: { type: String, default: '' },
     isUndo: { type: Boolean, default: false },
     isOnlyMove: { type: Boolean, default: false },
+    lastMoveQuality: { type: String as () => MoveQuality, default: 'unknown' },
   },
 
   emits: {
@@ -162,6 +166,7 @@ export default defineComponent({
           positionText,
           isUndo: Boolean(this.isUndo),
           isOnlyMove: this.isOnlyMove || analysis.isOnlyMove,
+          lastMoveQuality: isMoveQuality(this.lastMoveQuality) ? this.lastMoveQuality : undefined,
         },
       )
 
