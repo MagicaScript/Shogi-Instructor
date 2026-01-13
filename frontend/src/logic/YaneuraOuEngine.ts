@@ -8,11 +8,7 @@ import {
   type YaneuraOuOptionDef,
   type YaneuraOuParam,
 } from '@/schemes/YaneuraOuParam'
-
-export type Score =
-  | { type: 'none' }
-  | { type: 'cp'; value: number }
-  | { type: 'mate'; value: number | 'unknown' }
+import type { Score } from '@/schemes/usi'
 
 export type UsiInfo = {
   raw: string
@@ -23,6 +19,7 @@ export type UsiInfo = {
   nodes?: number
   nps?: number
   hashfull?: number
+  multipv?: number
 
   score?: Score
   pv?: string[]
@@ -33,6 +30,8 @@ export type AnalyzeResult = {
   ponder?: string
   lastInfo?: UsiInfo
   log: string[]
+  /** True when only one legal move exists (e.g. forced response to check). Requires MultiPV > 1. */
+  isOnlyMove: boolean
 }
 
 export type AnalyzeParams = {
@@ -627,6 +626,7 @@ export class YaneuraOuEngine {
     const log: string[] = []
     let lastInfo: UsiInfo | undefined
     let done = false
+    let hasMultipvField = false
 
     const bestmovePromise = new Promise<string>((resolve, reject) => {
       const timeoutId: ReturnType<typeof setTimeout> = setTimeout(() => {
@@ -635,7 +635,17 @@ export class YaneuraOuEngine {
 
       const off = this.onLine((line) => {
         log.push(line)
-        if (line.startsWith('info ')) lastInfo = this.parseUsiInfoLine(line)
+        if (line.startsWith('info ')) {
+          const parsed = this.parseUsiInfoLine(line)
+          // Track if any multipv field was present (indicates multiple legal moves)
+          if (parsed.multipv !== undefined) {
+            hasMultipvField = true
+          }
+          // Only keep info from multipv=1 (or when multipv is not specified)
+          if (parsed.multipv === undefined || parsed.multipv === 1) {
+            lastInfo = parsed
+          }
+        }
 
         if (line.startsWith('bestmove ')) {
           done = true
@@ -663,7 +673,11 @@ export class YaneuraOuEngine {
       const ponderIdx = parts.indexOf('ponder')
       const ponder = ponderIdx >= 0 ? parts[ponderIdx + 1] : undefined
 
-      return { bestmove, ponder, lastInfo, log }
+      // Detect only-move: when MultiPV > 1 but no multipv field in output
+      const multiPVSetting = this.lastAppliedParams?.MultiPV ?? YANEURAOU_PARAM_DEFAULTS.MultiPV
+      const isOnlyMove = multiPVSetting > 1 && !hasMultipvField
+
+      return { bestmove, ponder, lastInfo, log, isOnlyMove }
     } finally {
       this.analyzing = false
     }
@@ -736,6 +750,9 @@ export class YaneuraOuEngine {
         case 'hashfull':
           info.hashfull = parseNumber(parts[i++])
           break
+        case 'multipv':
+          info.multipv = parseNumber(parts[i++])
+          break
         case 'score': {
           const t = parts[i++]
           const v = parts[i++]
@@ -757,15 +774,10 @@ export class YaneuraOuEngine {
           }
           break
         }
-        case 'pv': {
-          const multiPV = this.lastAppliedParams?.MultiPV ?? YANEURAOU_PARAM_DEFAULTS.MultiPV
-          if (i >= parts.length - (multiPV - 1)) {
-            break
-          }
+        case 'pv':
           info.pv = parts.slice(i)
           i = parts.length
           break
-        }
         default:
           if (i < parts.length) i += 1
           break

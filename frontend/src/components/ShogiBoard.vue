@@ -18,7 +18,7 @@
         @drop="onDrop($event, index)"
         @click="handleCellClick(index)"
       >
-        <ShogiPieceComponent
+        <ShogiPiece
           v-if="piece"
           :label="piece.label"
           :is-opponent="piece.owner === 'opponent'"
@@ -32,7 +32,7 @@
 
 <script lang="ts">
 import { defineComponent, shallowReactive, type PropType } from 'vue'
-import ShogiPieceComponent from './ShogiPiece.vue'
+import ShogiPiece from './ShogiPiece.vue'
 import { type IShogiPiece, type PlayerOwner, type PieceType } from '@/logic/shogiPiece'
 import { calculateLegalMovesOnBoard, calculateLegalDrops } from '@/logic/shogiRules'
 
@@ -74,7 +74,7 @@ type BoardActionCallback = (action: string, payload: CellClickPayload) => void
 
 export default defineComponent({
   name: 'ShogiBoard',
-  components: { ShogiPieceComponent },
+  components: { ShogiPiece },
   props: {
     flipped: { type: Boolean, default: false },
     onBoardAction: {

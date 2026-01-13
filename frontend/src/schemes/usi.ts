@@ -1,13 +1,11 @@
-export type UsiScore =
+import { isObject } from '@/utils/typeGuards'
+
+export type Score =
   | { type: 'cp'; value: number }
   | { type: 'mate'; value: number | 'unknown' }
   | { type: 'none' }
 
-function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null
-}
-
-export function isUsiScore(v: unknown): v is UsiScore {
+export function isScore(v: unknown): v is Score {
   if (!isObject(v)) return false
   const t = v.type
   if (t === 'none') return true
@@ -26,7 +24,7 @@ export function isUsiScore(v: unknown): v is UsiScore {
   return false
 }
 
-export function normalizeUsiScore(score: UsiScore | undefined): UsiScore {
+export function normalizeScore(score: Score | undefined): Score {
   if (!score) return { type: 'none' }
   if (score.type === 'cp') return { type: 'cp', value: Math.trunc(score.value) }
   if (score.type === 'mate')
@@ -34,8 +32,8 @@ export function normalizeUsiScore(score: UsiScore | undefined): UsiScore {
   return { type: 'none' }
 }
 
-export function scoreToKey(score: UsiScore | undefined): string {
-  const s = normalizeUsiScore(score)
+export function scoreToKey(score: Score | undefined): string {
+  const s = normalizeScore(score)
   if (s.type === 'none') return 'none'
   if (s.type === 'cp') return `cp:${s.value}`
   return s.value === 'unknown' ? 'mate:?' : `mate:${s.value}`

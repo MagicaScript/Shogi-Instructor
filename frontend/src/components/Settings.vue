@@ -15,6 +15,7 @@ import {
   type YaneuraOuOptionDef,
   type YaneuraOuParam,
 } from '@/schemes/YaneuraOuParam'
+import { isNonEmptyString } from '@/utils/typeGuards'
 
 type Data = {
   state: SettingsState
@@ -26,10 +27,6 @@ type Data = {
   languageOpen: boolean
   coachOpen: boolean
   engineOpen: boolean
-}
-
-function isNonEmptyString(v: unknown): v is string {
-  return typeof v === 'string' && v.trim().length > 0
 }
 
 export default defineComponent({

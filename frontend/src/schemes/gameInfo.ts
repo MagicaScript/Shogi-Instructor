@@ -1,12 +1,10 @@
+import { isObject } from '@/utils/typeGuards'
+
 export type PlayerColor = 'sente' | 'gote'
 
 export type GameInfo = {
   sfen: string
   player: { color: PlayerColor }
-}
-
-function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null
 }
 
 export function isPlayerColor(v: unknown): v is PlayerColor {

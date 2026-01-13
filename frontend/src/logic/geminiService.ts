@@ -2,7 +2,8 @@
 
 import { settingsStore, type CoachProfile, type TextLanguage } from '@/schemes/settings'
 import type { EngineAnalysisPayload } from '@/schemes/engineAnalysis'
-import type { UsiScore } from '@/schemes/usi'
+import type { Score } from '@/schemes/usi'
+import { isObject } from '@/utils/typeGuards'
 
 export type GeminiEmotion = 'happy' | 'neutral' | 'concerned' | 'excited'
 
@@ -22,7 +23,7 @@ export type GeminiCoachContext = {
     sfen: string
     bestmove?: string
     ponder?: string
-    score?: UsiScore
+    score?: Score
     pv?: string[]
   }
   board?: GeminiBoardContext
@@ -35,10 +36,8 @@ export type GeminiBoardContext = {
   sideToMove?: string
   positionText?: string
   isUndo?: boolean
-}
-
-function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null
+  /** True when only one legal move exists (forced response to check). */
+  isOnlyMove?: boolean
 }
 
 function isGeminiEmotion(v: unknown): v is GeminiEmotion {
@@ -57,7 +56,7 @@ function isGeminiCoachResponse(v: unknown): v is GeminiCoachResponse {
 }
 
 function scoreToEvalContext(
-  score: UsiScore | undefined,
+  score: Score | undefined,
 ): { evalScoreText: string; evalContext: string } | null {
   if (!score || score.type === 'none') return null
 
@@ -82,12 +81,39 @@ function scoreToEvalContext(
   return { evalScoreText: String(cp), evalContext: `${ctx} ${side}` }
 }
 
+/** Returns a random integer in the inclusive range [min, max]. */
+function randomIntInclusive(min: number, max: number): number {
+  const lo = Math.ceil(min)
+  const hi = Math.floor(max)
+  const range = hi - lo + 1
+  if (range <= 0) return lo
+
+  const cryptoObj = globalThis.crypto
+  if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+    const buf = new Uint32Array(1)
+    const maxUint = 0xffffffff
+    const limit = maxUint - (maxUint % range)
+
+    for (let i = 0; i < 4; i++) {
+      cryptoObj.getRandomValues(buf)
+      const v = buf[0] ?? 0
+      if (v < limit) return lo + (v % range)
+    }
+
+    cryptoObj.getRandomValues(buf)
+    return lo + ((buf[0] ?? 0) % range)
+  }
+
+  return lo + Math.floor(Math.random() * range)
+}
+
 function buildPrompt(ctx: GeminiCoachContext): string {
   const s = ctx.settings
   const e = ctx.engine
   const b = ctx.board
 
   const scoreInfo = scoreToEvalContext(e.score)
+  const targetWordCount = randomIntInclusive(5, 30)
 
   const lines: string[] = []
   lines.push('TASK:')
@@ -95,26 +121,14 @@ function buildPrompt(ctx: GeminiCoachContext): string {
   lines.push(
     '    Speak in first person as the coach character ("I"). You are not a third-party observer.',
   )
-  lines.push('    Do NOT act like a spectator cheering for a side against an "AI" or "engine".')
-  lines.push(
-    '    Act like a Mentor/Coach with your specific personality: you react, you plan, you challenge.',
-  )
-  lines.push(
-    '    If you reference sides, prefer "your side" vs "my side" (and be consistent with context).',
-  )
+  lines.push('    Act like a Coach with personality.')
   lines.push('')
   lines.push('STYLE:')
   lines.push(
     '    When communicating, naturally select vivid alternatives to overused phrases and avoid repetitive wording.',
   )
   lines.push(
-    '    Use concrete, evocative language about board tension, timing, space, initiative, and piece interactions.',
-  )
-  lines.push(
-    '    You MAY use mild profanity naturally if it fits the coach personality and language, but NEVER use slurs/hate speech.',
-  )
-  lines.push(
-    '    Avoid explicit sexual content; keep physical details game-relevant and non-sexual.',
+    '    You MAY use mild profanity naturally if it fits the coach personality and language, but Avoid sexual/hate speech.',
   )
   lines.push('')
   lines.push('CONTEXT:')
@@ -131,10 +145,10 @@ function buildPrompt(ctx: GeminiCoachContext): string {
   if (b?.sideToMove) lines.push(`    - Side To Move: "${b.sideToMove}"`)
 
   if (scoreInfo) {
-    lines.push(`    - Engine Eval: ${scoreInfo.evalScoreText} (cp) -> ${scoreInfo.evalContext}`)
+    lines.push(`    - Eval: ${scoreInfo.evalScoreText} (cp) -> ${scoreInfo.evalContext}`)
   }
 
-  if (e.bestmove) lines.push(`    - Engine Recommended Best Move: ${e.bestmove}`)
+  if (e.bestmove) lines.push(`    - Best Move: ${e.bestmove}`)
   if (e.ponder) lines.push(`    - Ponder: ${e.ponder}`)
 
   if (e.pv && e.pv.length > 0) lines.push(`    - PV: ${e.pv.join(' ')}`)
@@ -149,19 +163,23 @@ function buildPrompt(ctx: GeminiCoachContext): string {
     )
   }
 
+  if (b?.isOnlyMove) {
+    lines.push('    - FORCED MOVE: This is the ONLY legal move (typically responding to check).')
+    lines.push('    - No alternative moves.')
+  }
+
   lines.push('')
   lines.push('GUIDELINES:')
-  lines.push('    1. Do NOT state any numeric evaluation score or best move.')
-  lines.push('    2. Stay in-character in first person; talk to the user as "you".')
+  lines.push('    1. Do NOT state any numeric evaluation score or specific move.')
   lines.push(
-    '    3. Focus on the meaning of the last move (defense, attack, shape) and one concrete next idea.',
+    '    2. Focus on the meaning of the last move (defense, attack, shape) and one concrete next idea.',
   )
-  lines.push('    4. Keep it concise (1–2 sentences, under ~40 words).')
+  lines.push(`    3. Keep it concise: 1–2 sentences, about ${targetWordCount} words.`)
   lines.push('')
   lines.push('OUTPUT:')
   lines.push(`    - Write in: ${s.textLanguage}`)
-  lines.push('    - Return only the coaching sentence.')
-  lines.push('    - No JSON, no markdown, no quotes, no code block.')
+  lines.push('    - Return only natural language.')
+  lines.push('    - No JSON, no markdown, no code block, no thought process.')
 
   return lines.join('\n')
 }

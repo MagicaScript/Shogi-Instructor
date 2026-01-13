@@ -62,6 +62,7 @@ import { parseSFEN, toSFEN, type KomadaiItem } from '@/utils/sfenUtils'
 import { calculateLegalMovesOnBoard, calculateLegalDrops } from '@/logic/shogiRules'
 import type { GameInfo, PlayerColor } from '@/schemes/gameInfo'
 import { isPlayerColor, isGameInfo } from '@/schemes/gameInfo'
+import { isObject, isNonEmptyString } from '@/utils/typeGuards'
 
 interface ShogiBoardInstance {
   setCell: (index: number, piece: IShogiPiece | null) => void
@@ -86,14 +87,6 @@ type LishogiStateResponse = {
 
 const DEFAULT_SFEN = 'lnsgkgsnl/1r5b1/ppppppppp/9/9/9/PPPPPPPPP/1B5R1/LNSGKGSNL b - 1'
 const LISHOGI_STATE_URL = 'http://127.0.0.1:3080/api/state'
-
-function isNonEmptyString(v: unknown): v is string {
-  return typeof v === 'string' && v.trim().length > 0
-}
-
-function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null
-}
 
 /**
  * ShogiGame Controller.

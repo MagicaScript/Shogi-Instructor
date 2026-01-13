@@ -8,6 +8,7 @@ import {
   requestGeminiCoach,
   type GeminiCoachResponse,
 } from '@/logic/geminiService'
+import { isNonEmptyString } from '@/utils/typeGuards'
 
 type Props = {
   analysis: EngineAnalysisPayload | null
@@ -23,6 +24,7 @@ type Props = {
   sideToMove?: string
   positionText?: string
   isUndo?: boolean
+  isOnlyMove?: boolean
 }
 
 type Data = {
@@ -31,10 +33,6 @@ type Data = {
   lastResult: GeminiCoachResponse | null
   unsub: null | (() => void)
   state: SettingsState
-}
-
-function isNonEmptyString(v: unknown): v is string {
-  return typeof v === 'string' && v.trim().length > 0
 }
 
 function mergeCoach(base: CoachProfile | null, p: Props): CoachProfile | null {
@@ -74,6 +72,7 @@ export default defineComponent({
     sideToMove: { type: String, default: '' },
     positionText: { type: String, default: '' },
     isUndo: { type: Boolean, default: false },
+    isOnlyMove: { type: Boolean, default: false },
   },
 
   emits: {
@@ -162,6 +161,7 @@ export default defineComponent({
           sideToMove: isNonEmptyString(this.sideToMove) ? this.sideToMove.trim() : undefined,
           positionText,
           isUndo: Boolean(this.isUndo),
+          isOnlyMove: this.isOnlyMove || analysis.isOnlyMove,
         },
       )
 

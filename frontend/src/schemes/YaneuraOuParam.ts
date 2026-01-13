@@ -1,5 +1,7 @@
 /* src/schemes/YaneuraOuParam.ts */
 
+import { isObject, isNonEmptyString } from '@/utils/typeGuards'
+
 export const ENTERING_KING_RULES = [
   'NoEnteringKing',
   'CSARule24',
@@ -65,8 +67,8 @@ export type YaneuraOuParam = {
 }
 
 export const YANEURAOU_PARAM_DEFAULTS: YaneuraOuParam = {
-  Threads: 4,
-  USI_Hash: 2048,
+  Threads: 6,
+  USI_Hash: 1536,
   USI_Ponder: false,
   Stochastic_Ponder: false,
   MultiPV: 2,
@@ -81,7 +83,7 @@ export const YANEURAOU_PARAM_DEFAULTS: YaneuraOuParam = {
   WriteDebugLog: '',
   GenerateAllLegalMoves: false,
   EnteringKingRule: 'CSARule27',
-  USI_OwnBook: true,
+  USI_OwnBook: false,
   NarrowBook: false,
   BookMoves: 16,
   BookIgnoreRate: 0,
@@ -213,20 +215,12 @@ export const YANEURAOU_OPTION_DEFS: readonly YaneuraOuOptionDef[] = [
   { name: 'OutputFailLHPV', type: 'check', default: true },
 ] as const
 
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null
-}
-
 function isIntegerNumber(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v) && Number.isInteger(v)
 }
 
 function clampInt(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n))
-}
-
-function isNonEmptyString(v: unknown): v is string {
-  return typeof v === 'string'
 }
 
 function isIn<T extends readonly string[]>(v: unknown, list: T): v is T[number] {
@@ -260,7 +254,7 @@ function clampBigInt(x: bigint, min: bigint, max: bigint): bigint {
 }
 
 export function isYaneuraOuParam(v: unknown): v is YaneuraOuParam {
-  if (!isRecord(v)) return false
+  if (!isObject(v)) return false
 
   const r = v as Record<string, unknown>
   const nodes = parseBigIntString(r.NodesLimit)
@@ -384,7 +378,7 @@ export function coerceYaneuraOuParam(
   raw: unknown,
   fallback: YaneuraOuParam = YANEURAOU_PARAM_DEFAULTS,
 ): YaneuraOuParam {
-  if (!isRecord(raw)) return { ...fallback }
+  if (!isObject(raw)) return { ...fallback }
 
   const base: YaneuraOuParam = { ...fallback }
   const r = raw as Record<string, unknown>

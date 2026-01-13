@@ -3,7 +3,7 @@ import { defineComponent } from 'vue'
 import { YaneuraOuEngine, type AnalyzeResult, type UsiInfo } from '@/logic/yaneuraOuEngine'
 import type { EngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import { isEngineAnalysisPayload } from '@/schemes/engineAnalysis'
-import { normalizeUsiScore } from '@/schemes/usi'
+import { normalizeScore } from '@/schemes/usi'
 
 type EngineStatus = 'idle' | 'loading' | 'ready' | 'analyzing' | 'error'
 
@@ -149,8 +149,9 @@ export default defineComponent({
           sfen: trimmed,
           bestmove: r.bestmove ?? null,
           ponder: r.ponder ?? null,
-          score: normalizeUsiScore(r.lastInfo?.score),
+          score: normalizeScore(r.lastInfo?.score),
           pv: r.lastInfo?.pv ? [...r.lastInfo.pv] : [],
+          isOnlyMove: r.isOnlyMove,
         }
 
         this.$emit('analysis-update', payload)

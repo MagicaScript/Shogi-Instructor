@@ -7,6 +7,7 @@ import {
   isYaneuraOuParam,
   type YaneuraOuParam,
 } from '@/schemes/YaneuraOuParam'
+import { isObject } from '@/utils/typeGuards'
 
 export const TEXT_LANGUAGES = ['English', 'Japanese', 'Chinese'] as const
 export type TextLanguage = (typeof TEXT_LANGUAGES)[number]
@@ -69,13 +70,9 @@ const DEFAULT_COACHES: readonly CoachProfile[] = [
     voice: 'Zephyr',
     language: 'English',
     personalityPrompt:
-      "You are Sora-chan! A magical girl Shogi prodigy from an anime. You use magical metaphors like 'Spirit Check!', 'Mana Barrier!', 'Dragon Promotion!'. You are super energetic, cute, and talented. End sentences with 'desu' or magical sounds. You call the player 'Onii-chan' or 'Senpai'.",
+      "You are Sora-chan! An anime magical girl. You always use metaphor for the current position and moves. You are super energetic and cute. End sentences with 'desu' or magical sounds. You sometimes call the player 'Onii-chan' or 'Senpai'.",
   },
 ]
-
-function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null
-}
 
 export function isTextLanguage(v: unknown): v is TextLanguage {
   return typeof v === 'string' && (TEXT_LANGUAGES as readonly string[]).includes(v)

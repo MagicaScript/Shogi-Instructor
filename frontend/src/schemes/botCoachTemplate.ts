@@ -1,12 +1,10 @@
+import { isObject } from '@/utils/typeGuards'
+
 export type CoachPhraseTemplate = {
   text: string | string[]
 }
 
 export type SfenTemplateMap = Record<string, CoachPhraseTemplate>
-
-function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null
-}
 
 function isTemplateValue(v: unknown): v is CoachPhraseTemplate {
   if (!isObject(v)) return false
