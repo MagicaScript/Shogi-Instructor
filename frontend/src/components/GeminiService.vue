@@ -112,6 +112,7 @@ export default defineComponent({
   watch: {
     safeAnalysis: {
       deep: true,
+      immediate: true,
       handler() {
         void this.tryRequest()
       },
@@ -121,7 +122,12 @@ export default defineComponent({
     },
     state: {
       deep: true,
-      handler() {
+      handler(next, prev) {
+        const unchanged =
+          !!prev &&
+          next?.textLanguage === prev.textLanguage &&
+          next?.audioLanguage === prev.audioLanguage
+        if (unchanged) return
         void this.tryRequest()
       },
     },
@@ -131,7 +137,6 @@ export default defineComponent({
     this.unsub = settingsStore.subscribe((s) => {
       this.state = s
     })
-    void this.tryRequest()
   },
 
   beforeUnmount() {

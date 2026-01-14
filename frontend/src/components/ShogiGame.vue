@@ -160,6 +160,7 @@ export default defineComponent({
       }
     },
 
+    // Single source of truth for emitting the updated SFEN.
     applySFEN(sfen: string) {
       const board = this.getBoardRef()
       if (!board) return
@@ -317,8 +318,6 @@ export default defineComponent({
         // Build and emit move history from steps
         this.moveHistory = this.buildMoveHistoryFromSteps(extracted.steps)
         this.emitMoveHistory()
-
-        this.emitCurrentSFEN()
         this.syncError = ''
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e)
