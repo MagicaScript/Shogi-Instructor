@@ -33,15 +33,18 @@ export type GeminiCoachContext = {
 
 export type GeminiBoardContext = {
   playerColor?: string
-  lastRoundMove?: string
   sideLastMove?: string
   sideToMove?: string
   positionText?: string
   isUndo?: boolean
   /** True when only one legal move exists (forced response to check). */
   isOnlyMove?: boolean
+  /** The last move in USI format (e.g. '7g7f', 'P*5e'). Applies to whichever side just moved. */
+  lastMove?: string
   /** Quality assessment of the last move (best, good, inaccuracy, mistake, blunder, forced, unknown). */
   lastMoveQuality?: MoveQuality
+  /** Eval drop in centipawns for the last move. Negative = position worsened. */
+  lastMoveEvalDrop?: number
 }
 
 function isGeminiEmotion(v: unknown): v is GeminiEmotion {
@@ -122,7 +125,7 @@ function buildPrompt(ctx: GeminiCoachContext): string {
   const lines: string[] = []
   lines.push('TASK:')
   lines.push(
-    '    You are teaching Shogi by playing a teaching game against player. you are the opponent.',
+    '    You are teaching Shogi by playing a teaching game against player. You are the opponent.',
   )
   lines.push('    Speak in first person ("I"). You are not a third-party observer.')
   lines.push('    Act like a Coach with personality.')
@@ -144,38 +147,18 @@ function buildPrompt(ctx: GeminiCoachContext): string {
 
   if (e.sfen.trim().length > 0) lines.push(`    - sfen: "${e.sfen.trim()}"`)
   if (b?.playerColor) lines.push(`    - Player side: "${b.playerColor}"`)
-  if (b?.lastRoundMove) lines.push(`    - Last round Move: "${b.lastRoundMove}"`)
   if (b?.sideLastMove) lines.push(`    - Side Last Move: "${b.sideLastMove}"`)
-  if (b?.sideToMove) lines.push(`    - Side To Move: "${b.sideToMove}"`)
-
-  if (scoreInfo) {
-    lines.push(`    - Eval: ${scoreInfo.evalScoreText} (cp) -> ${scoreInfo.evalContext}`)
-  }
-
-  if (e.bestmove) lines.push(`    - Best Move: ${e.bestmove}`)
-  if (e.ponder) lines.push(`    - Ponder: ${e.ponder}`)
-
-  if (e.pv && e.pv.length > 0) lines.push(`    - PV: ${e.pv.join(' ')}`)
-
-  if (b?.positionText && b.positionText.trim().length > 0) {
-    lines.push(`    - ${b.positionText.trim()}`)
-  }
-
-  if (b?.isUndo) {
-    lines.push(
-      '    - The player just took back a move (UNDO). Comment on their hesitation or the correction.',
-    )
-  }
-
-  if (b?.isOnlyMove) {
-    lines.push('    - FORCED MOVE: This is the ONLY legal move (typically responding to check).')
-    lines.push('    - No alternative moves.')
-  }
+  if (b?.lastMove) lines.push(`    - Last Move (USI): "${b.lastMove}"`)
 
   // Add move quality information
   if (b?.lastMoveQuality && b.lastMoveQuality !== 'unknown') {
     const qualityLabel = moveQualityLabel(b.lastMoveQuality)
-    lines.push(`    - Quality of Last Move: ${qualityLabel}`)
+    // Append eval drop if available (e.g. "Mistake (-1200)")
+    const evalDropSuffix =
+      typeof b.lastMoveEvalDrop === 'number'
+        ? ` (${b.lastMoveEvalDrop >= 0 ? '+' : ''}${b.lastMoveEvalDrop})`
+        : ''
+    lines.push(`    - Quality of Last Move: ${qualityLabel}${evalDropSuffix}`)
 
     // Add contextual guidance based on move quality
     switch (b.lastMoveQuality) {
@@ -200,6 +183,32 @@ function buildPrompt(ctx: GeminiCoachContext): string {
         )
         break
     }
+  }
+
+  if (b?.sideToMove) lines.push(`    - Side To Move: "${b.sideToMove}"`)
+
+  if (scoreInfo) {
+    lines.push(`    - Eval: ${scoreInfo.evalScoreText} (cp) -> ${scoreInfo.evalContext}`)
+  }
+
+  if (e.bestmove) lines.push(`    - Best Move for side to move: ${e.bestmove}`)
+  if (e.ponder) lines.push(`    - Ponder: ${e.ponder}`)
+
+  if (e.pv && e.pv.length > 0) lines.push(`    - PV: ${e.pv.join(' ')}`)
+
+  if (b?.positionText && b.positionText.trim().length > 0) {
+    lines.push(`    - ${b.positionText.trim()}`)
+  }
+
+  if (b?.isUndo) {
+    lines.push(
+      '    - The player just took back a move (UNDO). Comment on their hesitation or the correction.',
+    )
+  }
+
+  if (b?.isOnlyMove) {
+    lines.push('    - FORCED MOVE: This is the ONLY legal move (typically responding to check).')
+    lines.push('    - No alternative moves.')
   }
 
   lines.push('')

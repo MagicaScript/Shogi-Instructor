@@ -10,7 +10,11 @@ import type { GameInfo, PlayerColor } from '@/schemes/gameInfo'
 import { getSideToMoveFromSfen, oppositeColor } from '@/schemes/gameInfo'
 import { scoreToKey } from '@/schemes/usi'
 import type { MoveHistoryEntry, MoveQuality } from '@/schemes/moveHistory'
-import { computeMoveQualityWithContext, moveQualityLabel } from '@/logic/moveQuality'
+import {
+  computeMoveQualityWithContext,
+  moveQualityLabel,
+  computeEvalDrop,
+} from '@/logic/moveQuality'
 import { normalizeSfen } from '@/schemes/engineAnalysis'
 
 type Props = {
@@ -55,6 +59,14 @@ type Data = {
   playerLastMoveQuality: MoveQuality
   /** Computed move quality for the last opponent move */
   opponentLastMoveQuality: MoveQuality
+  /** The last move by the player in USI format (e.g. '7g7f'). */
+  playerLastMove: string
+  /** The last move by the opponent in USI format (e.g. '7g7f'). */
+  opponentLastMove: string
+  /** Eval drop in centipawns for the player's last move. */
+  playerLastMoveEvalDrop: number | null
+  /** Eval drop in centipawns for the opponent's last move. */
+  opponentLastMoveEvalDrop: number | null
 }
 
 export default defineComponent({
@@ -91,6 +103,10 @@ export default defineComponent({
       analysisCache: new Map<string, EngineAnalysisPayload>(),
       playerLastMoveQuality: 'unknown' as MoveQuality,
       opponentLastMoveQuality: 'unknown' as MoveQuality,
+      playerLastMove: '',
+      opponentLastMove: '',
+      playerLastMoveEvalDrop: null,
+      opponentLastMoveEvalDrop: null,
     }
   },
 
@@ -393,8 +409,14 @@ export default defineComponent({
           lastPlayerEntry,
           prevPlayerAnalysis.score,
         )
+        // Compute eval drop for player's last move
+        this.playerLastMoveEvalDrop = computeEvalDrop(
+          prevPlayerAnalysis.score,
+          lastPlayerEntry.evalAfterMove,
+        )
       } else {
         this.playerLastMoveQuality = 'unknown'
+        this.playerLastMoveEvalDrop = null
       }
 
       // Compute quality for opponent's last move
@@ -409,9 +431,19 @@ export default defineComponent({
           lastOpponentEntry,
           prevOpponentAnalysis.score,
         )
+        // Compute eval drop for opponent's last move
+        this.opponentLastMoveEvalDrop = computeEvalDrop(
+          prevOpponentAnalysis.score,
+          lastOpponentEntry.evalAfterMove,
+        )
       } else {
         this.opponentLastMoveQuality = 'unknown'
+        this.opponentLastMoveEvalDrop = null
       }
+
+      // Extract USI move strings for passing to Gemini
+      this.playerLastMove = lastPlayerEntry?.usiMove ?? ''
+      this.opponentLastMove = lastOpponentEntry?.usiMove ?? ''
     },
 
     /**
@@ -524,7 +556,9 @@ export default defineComponent({
         :side-last-move="sideLastMoveLabelFor(playerMeta)"
         :side-to-move="sideToMoveLabelFor(playerMeta)"
         :is-only-move="playerMeta.isOnlyMove"
+        :last-move="playerLastMove"
         :last-move-quality="playerLastMoveQuality"
+        :last-move-eval-drop="playerLastMoveEvalDrop ?? undefined"
         position-text="Evaluate the player's last move."
         @result="onPlayerGeminiResult"
         @error="onPlayerGeminiError"
@@ -544,7 +578,9 @@ export default defineComponent({
         :side-last-move="sideLastMoveLabelFor(opponentMeta)"
         :side-to-move="sideToMoveLabelFor(opponentMeta)"
         :is-only-move="opponentMeta.isOnlyMove"
+        :last-move="opponentLastMove"
         :last-move-quality="opponentLastMoveQuality"
+        :last-move-eval-drop="opponentLastMoveEvalDrop ?? undefined"
         position-text="Explain your last move: purpose, threat, and how the player should respond."
         @result="onOpponentGeminiResult"
         @error="onOpponentGeminiError"

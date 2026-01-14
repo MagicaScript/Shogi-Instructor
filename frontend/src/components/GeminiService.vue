@@ -21,13 +21,16 @@ type Props = {
   coachLanguage?: SettingsState['textLanguage']
   personalityPrompt?: string
   playerColor?: string
-  lastRoundMove?: string
   sideLastMove?: string
   sideToMove?: string
   positionText?: string
   isUndo?: boolean
   isOnlyMove?: boolean
+  /** The last move in USI format (e.g. '7g7f', 'P*5e'). */
+  lastMove?: string
   lastMoveQuality?: MoveQuality
+  /** Eval drop in centipawns for the last move. Negative = position worsened. */
+  lastMoveEvalDrop?: number
 }
 
 type Data = {
@@ -70,13 +73,16 @@ export default defineComponent({
     coachLanguage: { type: String as () => Props['coachLanguage'], default: '' },
     personalityPrompt: { type: String, default: '' },
     playerColor: { type: String, default: '' },
-    lastRoundMove: { type: String, default: '' },
     sideLastMove: { type: String, default: '' },
     sideToMove: { type: String, default: '' },
     positionText: { type: String, default: '' },
     isUndo: { type: Boolean, default: false },
     isOnlyMove: { type: Boolean, default: false },
+    /** The last move in USI format (e.g. '7g7f', 'P*5e'). */
+    lastMove: { type: String, default: '' },
     lastMoveQuality: { type: String as () => MoveQuality, default: 'unknown' },
+    /** Eval drop in centipawns for the last move. */
+    lastMoveEvalDrop: { type: Number, default: undefined },
   },
 
   emits: {
@@ -158,15 +164,15 @@ export default defineComponent({
         coach,
         { textLanguage: this.state.textLanguage, audioLanguage: this.state.audioLanguage },
         {
-          lastRoundMove: isNonEmptyString(this.lastRoundMove)
-            ? this.lastRoundMove.trim()
-            : undefined,
           sideLastMove: isNonEmptyString(this.sideLastMove) ? this.sideLastMove.trim() : undefined,
           sideToMove: isNonEmptyString(this.sideToMove) ? this.sideToMove.trim() : undefined,
           positionText,
           isUndo: Boolean(this.isUndo),
           isOnlyMove: this.isOnlyMove || analysis.isOnlyMove,
+          lastMove: isNonEmptyString(this.lastMove) ? this.lastMove.trim() : undefined,
           lastMoveQuality: isMoveQuality(this.lastMoveQuality) ? this.lastMoveQuality : undefined,
+          lastMoveEvalDrop:
+            typeof this.lastMoveEvalDrop === 'number' ? this.lastMoveEvalDrop : undefined,
         },
       )
 
