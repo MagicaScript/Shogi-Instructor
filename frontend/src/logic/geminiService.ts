@@ -76,9 +76,9 @@ function scoreToEvalContext(
   const abs = Math.abs(cp)
 
   let ctx = 'approximately equal'
-  if (abs < 80) ctx = 'slight edge'
-  else if (abs < 200) ctx = 'clear advantage'
-  else if (abs < 500) ctx = 'large advantage'
+  if (abs < 100) ctx = 'slight edge'
+  else if (abs < 300) ctx = 'clear advantage'
+  else if (abs < 2000) ctx = 'large advantage'
   else ctx = 'decisive advantage'
 
   const side = cp > 0 ? 'for the side to move' : 'against the side to move'
@@ -121,10 +121,10 @@ function buildPrompt(ctx: GeminiCoachContext): string {
 
   const lines: string[] = []
   lines.push('TASK:')
-  lines.push('    You are teaching Shogi to the user by playing a teaching game WITH them.')
   lines.push(
-    '    Speak in first person as the coach character ("I"). You are not a third-party observer.',
+    '    You are teaching Shogi by playing a teaching game against player. you are the opponent.',
   )
+  lines.push('    Speak in first person ("I"). You are not a third-party observer.')
   lines.push('    Act like a Coach with personality.')
   lines.push('')
   lines.push('STYLE:')
@@ -132,7 +132,7 @@ function buildPrompt(ctx: GeminiCoachContext): string {
     '    When communicating, naturally select vivid alternatives to overused phrases and avoid repetitive wording.',
   )
   lines.push(
-    '    You MAY use mild profanity naturally if it fits the coach personality and language, but Avoid sexual/hate speech.',
+    '    You MAY use mild profanity naturally if it fits the character personality, but avoid sexual/hate speech.',
   )
   lines.push('')
   lines.push('CONTEXT:')
@@ -180,25 +180,19 @@ function buildPrompt(ctx: GeminiCoachContext): string {
     // Add contextual guidance based on move quality
     switch (b.lastMoveQuality) {
       case 'best':
-        lines.push(
-          '    - The last move was the engine-recommended best move. Acknowledge the good play.',
-        )
+        lines.push('    - The last move was the best move. Acknowledge the good play.')
         break
       case 'good':
-        lines.push('    - The last move was solid, close to best. Briefly affirm.')
+        lines.push('    - The last move was solid, close to best.')
         break
       case 'inaccuracy':
-        lines.push('    - The last move was slightly inaccurate. Gently suggest improvement.')
+        lines.push('    - The last move was slightly inaccurate.')
         break
       case 'mistake':
-        lines.push(
-          '    - The last move was a mistake. Explain what went wrong without being harsh.',
-        )
+        lines.push('    - The last move was a mistake.')
         break
       case 'blunder':
-        lines.push(
-          '    - The last move was a serious blunder. Highlight the error clearly but constructively.',
-        )
+        lines.push('    - The last move was a serious blunder.')
         break
       case 'forced':
         lines.push(
@@ -218,7 +212,7 @@ function buildPrompt(ctx: GeminiCoachContext): string {
   lines.push('')
   lines.push('OUTPUT:')
   lines.push(`    - Write in: ${s.textLanguage}`)
-  lines.push('    - Return only natural language.')
+  lines.push('    - Return only natural language in any condition.')
   lines.push('    - No JSON, no markdown, no code block, no thought process.')
 
   return lines.join('\n')

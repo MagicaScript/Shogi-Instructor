@@ -74,9 +74,9 @@ export function computeEvalDrop(
 export function classifyByEvalDrop(evalDrop: number): MoveQuality {
   // Thresholds (in centipawns)
   // These are typical values used in chess analysis
-  if (evalDrop >= -30) return 'good'
-  if (evalDrop >= -100) return 'inaccuracy'
-  if (evalDrop >= -300) return 'mistake'
+  if (evalDrop >= -50) return 'good'
+  if (evalDrop >= -200) return 'inaccuracy'
+  if (evalDrop >= -500) return 'mistake'
   return 'blunder'
 }
 

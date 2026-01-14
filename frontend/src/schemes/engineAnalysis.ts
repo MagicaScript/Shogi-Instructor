@@ -27,6 +27,18 @@ export function isEngineAnalysisPayload(v: unknown): v is EngineAnalysisPayload 
   return true
 }
 
+/**
+ * Normalizes a SFEN string for comparison.
+ * Strips the move number (4th field) since Lishogi and engine may differ.
+ * Format: "<board> <turn> <hands> [moveNumber]" -> "<board> <turn> <hands>"
+ */
 export function normalizeSfen(sfen: string): string {
-  return sfen.trim().replace(/\s+/g, ' ')
+  const trimmed = sfen.trim().replace(/\s+/g, ' ')
+  // Split into parts: board, turn, hands, [moveNumber]
+  const parts = trimmed.split(' ')
+  // Keep only the first 3 parts (board, turn, hands), ignore move number
+  if (parts.length >= 3) {
+    return `${parts[0]} ${parts[1]} ${parts[2]}`
+  }
+  return trimmed
 }
