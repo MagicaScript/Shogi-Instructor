@@ -16,6 +16,9 @@ import {
   computeEvalDrop,
 } from '@/logic/moveQuality'
 import { normalizeSfen } from '@/schemes/engineAnalysis'
+import { parseSFEN } from '@/utils/sfenUtils'
+import type { IShogiPiece, PlayerOwner } from '@/logic/shogiPiece'
+import { findTopHangingPieceLabel } from '@/logic/shogiRules'
 
 type Props = {
   analysis: EngineAnalysisPayload | null
@@ -63,9 +66,9 @@ type Data = {
   playerLastMove: string
   /** The last move by the opponent in USI format (e.g. '7g7f'). */
   opponentLastMove: string
-  /** Eval drop in centipawns for the player's last move. */
+  /** Eval drop for the player's last move. */
   playerLastMoveEvalDrop: number | null
-  /** Eval drop in centipawns for the opponent's last move. */
+  /** Eval drop for the opponent's last move. */
   opponentLastMoveEvalDrop: number | null
 }
 
@@ -315,6 +318,34 @@ export default defineComponent({
       return scoreToKey(score)
     },
 
+    buildCellsFromSfen(sfen: string): (IShogiPiece | null)[] {
+      const parsed = parseSFEN(sfen)
+      const cells = Array<IShogiPiece | null>(81).fill(null)
+      for (const [idx, piece] of parsed.boardState) {
+        cells[idx] = piece
+      }
+      return cells
+    },
+
+    hangedPieceFor(analysis: EngineAnalysisPayload | null): string {
+      if (!analysis) return ''
+      const playerColor = this.playerColor
+      if (!playerColor) return ''
+      const sideToMove = getSideToMoveFromSfen(analysis.sfen)
+      if (!sideToMove) return ''
+
+      const playerOwner: PlayerOwner = playerColor === 'sente' ? 'self' : 'opponent'
+      const opponentOwner: PlayerOwner = playerOwner === 'self' ? 'opponent' : 'self'
+      const targetOwner = sideToMove === playerColor ? opponentOwner : playerOwner
+
+      try {
+        const cells = this.buildCellsFromSfen(analysis.sfen)
+        return findTopHangingPieceLabel(cells, targetOwner) ?? ''
+      } catch {
+        return ''
+      }
+    },
+
     /**
      * Caches the current analysis by normalized SFEN for later linking.
      */
@@ -442,8 +473,8 @@ export default defineComponent({
       }
 
       // Extract USI move strings for passing to Gemini
-      this.playerLastMove = lastPlayerEntry?.usiMove ?? ''
-      this.opponentLastMove = lastOpponentEntry?.usiMove ?? ''
+      this.playerLastMove = lastPlayerEntry?.usiMoveFull ?? lastPlayerEntry?.usiMove ?? ''
+      this.opponentLastMove = lastOpponentEntry?.usiMoveFull ?? lastOpponentEntry?.usiMove ?? ''
     },
 
     /**
@@ -559,6 +590,7 @@ export default defineComponent({
         :last-move="playerLastMove"
         :last-move-quality="playerLastMoveQuality"
         :last-move-eval-drop="playerLastMoveEvalDrop ?? undefined"
+        :hanged-piece="hangedPieceFor(playerMeta)"
         position-text="Evaluate the player's last move."
         @result="onPlayerGeminiResult"
         @error="onPlayerGeminiError"
@@ -581,6 +613,7 @@ export default defineComponent({
         :last-move="opponentLastMove"
         :last-move-quality="opponentLastMoveQuality"
         :last-move-eval-drop="opponentLastMoveEvalDrop ?? undefined"
+        :hanged-piece="hangedPieceFor(opponentMeta)"
         position-text="Explain your last move: purpose, threat, and how the player should respond."
         @result="onOpponentGeminiResult"
         @error="onOpponentGeminiError"

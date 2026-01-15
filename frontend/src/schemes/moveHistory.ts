@@ -20,6 +20,8 @@ export type MoveHistoryEntry = {
   moveBySide: PlayerColor
   /** The actual move in USI format (e.g. '7g7f', 'P*5e'). Null for initial position. */
   usiMove: string | null
+  /** The USI move prefixed with the moved piece (e.g. 'P7g7f'). */
+  usiMoveFull?: string
   /** SFEN after this move was played. */
   sfenAfter: string
   /** Engine-recommended best move for this position (before the move was made). */
@@ -49,6 +51,7 @@ export function isMoveHistoryEntry(v: unknown): v is MoveHistoryEntry {
   if (typeof v.ply !== 'number' || !Number.isInteger(v.ply) || v.ply < 0) return false
   if (!isPlayerColor(v.moveBySide)) return false
   if (!(typeof v.usiMove === 'string' || v.usiMove === null)) return false
+  if (v.usiMoveFull !== undefined && typeof v.usiMoveFull !== 'string') return false
   if (typeof v.sfenAfter !== 'string') return false
   if (!(typeof v.recommendedBestMove === 'string' || v.recommendedBestMove === null)) return false
   if (!(v.evalAfterMove === null || isScore(v.evalAfterMove))) return false
@@ -65,11 +68,13 @@ export function createMoveHistoryEntry(
   moveBySide: PlayerColor,
   usiMove: string | null,
   sfenAfter: string,
+  usiMoveFull?: string,
 ): MoveHistoryEntry {
   return {
     ply,
     moveBySide,
     usiMove,
+    usiMoveFull,
     sfenAfter,
     recommendedBestMove: null,
     evalAfterMove: null,

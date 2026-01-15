@@ -15,6 +15,8 @@
         <ShogiBoard
           ref="boardRef"
           :flipped="playerColor === 'gote'"
+          :my-komadai="myKomadai"
+          :opponent-komadai="opponentKomadai"
           @piece-move="handlePieceMove"
           @piece-drop="handlePieceDrop"
         />
@@ -58,8 +60,17 @@ import {
   type PieceType,
 } from '@/logic/shogiPiece'
 import type { PieceMovePayload, PieceDropPayload } from './ShogiBoard.vue'
-import { parseSFEN, toSFEN, type KomadaiItem } from '@/utils/sfenUtils'
-import { calculateLegalMovesOnBoard, calculateLegalDrops } from '@/logic/shogiRules'
+import { parseSFEN, toSFEN, toFullUsiMove, type KomadaiItem } from '@/utils/sfenUtils'
+import {
+  calculateLegalMovesOnBoard,
+  calculateLegalDrops,
+  canPromotePiece,
+  isInPromotionZoneIndex,
+  isPromotionMandatory,
+  isInCheck,
+  isCheckmate,
+  type KomadaiByOwner,
+} from '@/logic/shogiRules'
 import type { GameInfo, PlayerColor } from '@/schemes/gameInfo'
 import { isPlayerColor, isGameInfo } from '@/schemes/gameInfo'
 import { isObject, isNonEmptyString } from '@/utils/typeGuards'
@@ -121,6 +132,12 @@ export default defineComponent({
       syncError: '' as string,
       playerColor: null as PlayerColor | null,
       moveHistory: [] as MoveHistoryEntry[],
+      checkStatus: {
+        selfInCheck: false,
+        opponentInCheck: false,
+        selfCheckmate: false,
+        opponentCheckmate: false,
+      },
     }
   },
   mounted() {
@@ -180,6 +197,7 @@ export default defineComponent({
       this.myKomadai = myKomadai
       this.opponentKomadai = opponentKomadai
       this.currentTurn = turn
+      this.updateCheckStatus()
 
       const mn = this.extractMoveNumberFromSFEN(sfen)
       if (mn !== null) this.moveNumber = mn
@@ -268,7 +286,9 @@ export default defineComponent({
     buildMoveHistoryFromSteps(steps: LishogiStateItem[]): MoveHistoryEntry[] {
       const history: MoveHistoryEntry[] = []
 
-      for (const step of steps) {
+      for (let i = 0; i < steps.length; i++) {
+        const step = steps[i]
+        if (!step) continue
         // ply=0 is initial position, no move made
         if (step.ply < 1) continue
 
@@ -278,7 +298,11 @@ export default defineComponent({
         // Pattern: ply is odd -> sente moved, ply is even -> gote moved
         const moveBySide: PlayerColor = step.ply % 2 === 1 ? 'sente' : 'gote'
 
-        const entry = createMoveHistoryEntry(step.ply, moveBySide, step.usi ?? null, step.sfen)
+        const rawUsi = step.usi ?? null
+        const prev = i > 0 ? steps[i - 1] : null
+        const fullUsi = rawUsi && prev?.sfen ? toFullUsiMove(rawUsi, prev.sfen) : undefined
+
+        const entry = createMoveHistoryEntry(step.ply, moveBySide, rawUsi, step.sfen, fullUsi)
 
         history.push(entry)
       }
@@ -353,7 +377,8 @@ export default defineComponent({
       const legal = calculateLegalMovesOnBoard(source, payload.from, board.cells)
       if (!legal.includes(payload.to)) return
 
-      this.executeMove(board, payload.from, payload.to, target, source)
+      const promote = this.shouldPromoteMove(source, payload.from, payload.to)
+      this.executeMove(board, payload.from, payload.to, target, source, promote)
     },
 
     executeMove(
@@ -362,12 +387,15 @@ export default defineComponent({
       to: number,
       target: IShogiPiece | null,
       source: IShogiPiece,
+      promote: boolean,
     ) {
       if (target) this.capturePiece(target, source.owner)
+      if (promote) source.promote()
       board.setCell(from, null)
       board.setCell(to, source)
       this.moveNumber++
       this.currentTurn = this.currentTurn === 'self' ? 'opponent' : 'self'
+      this.updateCheckStatus()
       this.emitCurrentSFEN()
     },
 
@@ -379,7 +407,12 @@ export default defineComponent({
       if (board.getCell(payload.to)) return
       if (!this.hasInKomadai(payload.pieceType, payload.owner)) return
 
-      const legalDrops = calculateLegalDrops(payload.pieceType, payload.owner, board.cells)
+      const legalDrops = calculateLegalDrops(
+        payload.pieceType,
+        payload.owner,
+        board.cells,
+        this.getKomadaiByOwner(),
+      )
       if (!legalDrops.includes(payload.to)) return
 
       const newPiece = ShogiPieceFactory.create(payload.pieceType, payload.owner)
@@ -387,6 +420,7 @@ export default defineComponent({
       board.setCell(payload.to, newPiece)
       this.moveNumber++
       this.currentTurn = this.currentTurn === 'self' ? 'opponent' : 'self'
+      this.updateCheckStatus()
       this.emitCurrentSFEN()
     },
 
@@ -419,6 +453,31 @@ export default defineComponent({
       if (item.count === 0) {
         const idx = targetKomadai.indexOf(item)
         if (idx >= 0) targetKomadai.splice(idx, 1)
+      }
+    },
+
+    getKomadaiByOwner(): KomadaiByOwner {
+      return { self: this.myKomadai, opponent: this.opponentKomadai }
+    },
+
+    shouldPromoteMove(piece: IShogiPiece, from: number, to: number): boolean {
+      if (!canPromotePiece(piece)) return false
+      const touchesZone =
+        isInPromotionZoneIndex(piece.owner, from) || isInPromotionZoneIndex(piece.owner, to)
+      if (!touchesZone) return false
+      if (isPromotionMandatory(piece.type, piece.owner, to)) return true
+      return window.confirm('Promote this piece?')
+    },
+
+    updateCheckStatus() {
+      const board = this.getBoardRef()
+      if (!board) return
+      const komadaiByOwner = this.getKomadaiByOwner()
+      this.checkStatus = {
+        selfInCheck: isInCheck('self', board.cells),
+        opponentInCheck: isInCheck('opponent', board.cells),
+        selfCheckmate: isCheckmate('self', board.cells, komadaiByOwner),
+        opponentCheckmate: isCheckmate('opponent', board.cells, komadaiByOwner),
       }
     },
   },

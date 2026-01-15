@@ -62,5 +62,5 @@ if errorlevel 1 (
 echo SUCCESS: bridge.js copied to clipboard.
 echo You can now paste it into the lishogi DevTools Console.
 echo.
-pause
 endlocal
+exit /b 0

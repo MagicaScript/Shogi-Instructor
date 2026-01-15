@@ -65,6 +65,8 @@ const PIECE_LABEL_MAP: Record<PieceType, string> = {
 
 const BOARD_SIZE = 9
 const BOARD_CELLS = 81
+const USI_RANK_A_CODE = 'a'.charCodeAt(0)
+const USI_RANK_I_CODE = 'i'.charCodeAt(0)
 
 function isDigitChar(ch: string): boolean {
   const code = ch.charCodeAt(0)
@@ -320,4 +322,48 @@ function addOrUpdateKomadai(list: KomadaiItem[], item: KomadaiItem): void {
     return
   }
   list.push({ ...item })
+}
+
+/**
+ * Converts a USI move into a full USI move prefixed with the moving piece letter,
+ * using the given SFEN to locate the moving piece.
+ *
+ * Examples:
+ * - "7g7f" -> "P7g7f"
+ * - "8h7g" -> "B8h7g"
+ * - "P*5e" -> "P*5e" (already includes piece)
+ */
+export function toFullUsiMove(usi: string, sfen: string): string {
+  const trimmed = usi.trim()
+  if (!trimmed) return trimmed
+  if (trimmed.includes('*')) return trimmed
+  if (trimmed.length < 4) return trimmed
+
+  const from = trimmed.slice(0, 2)
+  const fileChar = from[0]
+  const rankChar = from[1]
+  if (!fileChar || !rankChar) return trimmed
+
+  const file = Number.parseInt(fileChar, 10)
+  if (!Number.isFinite(file) || file < 1 || file > 9) return trimmed
+
+  const rankCode = rankChar.charCodeAt(0)
+  if (rankCode < USI_RANK_A_CODE || rankCode > USI_RANK_I_CODE) return trimmed
+
+  const x = 9 - file
+  const y = rankCode - USI_RANK_A_CODE
+  const index = y * BOARD_SIZE + x
+
+  try {
+    const parsed = parseSFEN(sfen)
+    const piece = parsed.boardState.get(index)
+    if (!piece) return trimmed
+
+    const pieceLetter = PIECE_TYPE_TO_SFEN[piece.type]
+    if (!pieceLetter) return trimmed
+
+    return `${pieceLetter}${trimmed}`
+  } catch {
+    return trimmed
+  }
 }

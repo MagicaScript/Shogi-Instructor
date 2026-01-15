@@ -35,6 +35,7 @@ import { defineComponent, shallowReactive, type PropType } from 'vue'
 import ShogiPiece from './ShogiPiece.vue'
 import { type IShogiPiece, type PlayerOwner, type PieceType } from '@/logic/shogiPiece'
 import { calculateLegalMovesOnBoard, calculateLegalDrops } from '@/logic/shogiRules'
+import type { KomadaiItem } from '@/utils/sfenUtils'
 
 export interface BoardDragData {
   type: 'MOVE_ON_BOARD'
@@ -77,6 +78,14 @@ export default defineComponent({
   components: { ShogiPiece },
   props: {
     flipped: { type: Boolean, default: false },
+    myKomadai: {
+      type: Array as PropType<KomadaiItem[]>,
+      default: () => [],
+    },
+    opponentKomadai: {
+      type: Array as PropType<KomadaiItem[]>,
+      default: () => [],
+    },
     onBoardAction: {
       type: Function as PropType<BoardActionCallback>,
       default: null,
@@ -112,7 +121,10 @@ export default defineComponent({
     previewDropTargets(pieceType: PieceType, owner: PlayerOwner) {
       this.selectedIndex = -1
       this.previewDrop = { pieceType, owner }
-      this.legalMoves = calculateLegalDrops(pieceType, owner, this.cells)
+      this.legalMoves = calculateLegalDrops(pieceType, owner, this.cells, {
+        self: this.myKomadai,
+        opponent: this.opponentKomadai,
+      })
     },
 
     onDragStart(event: DragEvent, index: number) {
@@ -185,7 +197,10 @@ export default defineComponent({
           return
         }
 
-        const legalDrops = calculateLegalDrops(data.piece.type, data.owner, this.cells)
+        const legalDrops = calculateLegalDrops(data.piece.type, data.owner, this.cells, {
+          self: this.myKomadai,
+          opponent: this.opponentKomadai,
+        })
         if (!legalDrops.includes(targetIndex)) {
           this.clearSelection()
           return

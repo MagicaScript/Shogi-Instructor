@@ -29,8 +29,10 @@ type Props = {
   /** The last move in USI format (e.g. '7g7f', 'P*5e'). */
   lastMove?: string
   lastMoveQuality?: MoveQuality
-  /** Eval drop in centipawns for the last move. Negative = position worsened. */
+  /** Eval drop for the last move. Negative = position worsened. */
   lastMoveEvalDrop?: number
+  /** Single top hanging piece in "R@5e" format. */
+  hangedPiece?: string
 }
 
 type Data = {
@@ -81,8 +83,10 @@ export default defineComponent({
     /** The last move in USI format (e.g. '7g7f', 'P*5e'). */
     lastMove: { type: String, default: '' },
     lastMoveQuality: { type: String as () => MoveQuality, default: 'unknown' },
-    /** Eval drop in centipawns for the last move. */
+    /** Eval drop for the last move. */
     lastMoveEvalDrop: { type: Number, default: undefined },
+    /** Single top hanging piece in "R@5e" format. */
+    hangedPiece: { type: String, default: '' },
   },
 
   emits: {
@@ -178,6 +182,7 @@ export default defineComponent({
           lastMoveQuality: isMoveQuality(this.lastMoveQuality) ? this.lastMoveQuality : undefined,
           lastMoveEvalDrop:
             typeof this.lastMoveEvalDrop === 'number' ? this.lastMoveEvalDrop : undefined,
+          hangedPiece: isNonEmptyString(this.hangedPiece) ? this.hangedPiece.trim() : undefined,
         },
       )
 

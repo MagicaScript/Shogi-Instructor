@@ -65,7 +65,7 @@ Then open the printed Vite URL (typically `http://localhost:5173`).
 
 - **Nothing updates**: ensure the backend is running and `http://127.0.0.1:3080/api/health` returns `{"status":"ok" ...}`.
 - **Sync errors**: the frontend expects `/api/state` to contain recent data; refresh lishogi and re-run the bridge script.
-- **LLM settings**: configure your Gemini settings in the app UI (API key, base URL, model).
+- **LLM settings**: configure your Llm settings in the app UI (API key, base URL, model).
 
 ## Licensing / GPL notice
 

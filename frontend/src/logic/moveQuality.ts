@@ -7,7 +7,6 @@ import type { Score } from '@/schemes/usi'
  * Normalizes a USI move string for comparison.
  * - Trims whitespace
  * - Converts to lowercase
- * - Removes any trailing '+' ambiguity (promotion marker consistency)
  */
 export function normalizeUsi(usi: string | null | undefined): string {
   if (!usi) return ''
@@ -28,7 +27,7 @@ export function usiEquals(a: string | null | undefined, b: string | null | undef
  * Extracts centipawn value from a Score, returning null if not applicable.
  * For mate scores, returns a large value (positive or negative).
  */
-export function scoreToCentipawns(score: Score | null | undefined): number | null {
+export function scoreToEvalDrop(score: Score | null | undefined): number | null {
   if (!score) return null
   if (score.type === 'none') return null
   if (score.type === 'cp') return score.value
@@ -49,14 +48,14 @@ export function scoreToCentipawns(score: Score | null | undefined): number | nul
  *
  * @param evalBefore Score before the move (from previous analysis, side-to-move perspective)
  * @param evalAfter Score after the move (from current analysis, opponent's perspective)
- * @returns The eval drop in centipawns, or null if cannot compute.
+ * @returns The eval drop , or null if cannot compute.
  */
 export function computeEvalDrop(
   evalBefore: Score | null | undefined,
   evalAfter: Score | null | undefined,
 ): number | null {
-  const cpBefore = scoreToCentipawns(evalBefore)
-  const cpAfter = scoreToCentipawns(evalAfter)
+  const cpBefore = scoreToEvalDrop(evalBefore)
+  const cpAfter = scoreToEvalDrop(evalAfter)
 
   if (cpBefore === null || cpAfter === null) return null
 
@@ -72,7 +71,7 @@ export function computeEvalDrop(
  * Classifies the quality of a move based on eval drop.
  */
 export function classifyByEvalDrop(evalDrop: number): MoveQuality {
-  // Thresholds (in centipawns)
+  // Thresholds (in eval)
   // These are typical values used in chess analysis
   if (evalDrop >= -50) return 'good'
   if (evalDrop >= -200) return 'inaccuracy'

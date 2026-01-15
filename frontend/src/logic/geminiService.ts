@@ -6,6 +6,7 @@ import type { Score } from '@/schemes/usi'
 import { isObject } from '@/utils/typeGuards'
 import type { MoveQuality } from '@/schemes/moveHistory'
 import { moveQualityLabel } from '@/logic/moveQuality'
+import { toFullUsiMove } from '@/utils/sfenUtils'
 
 export type GeminiEmotion = 'happy' | 'neutral' | 'concerned' | 'excited'
 
@@ -43,8 +44,10 @@ export type GeminiBoardContext = {
   lastMove?: string
   /** Quality assessment of the last move (best, good, inaccuracy, mistake, blunder, forced, unknown). */
   lastMoveQuality?: MoveQuality
-  /** Eval drop in centipawns for the last move. Negative = position worsened. */
+  /** Eval drop for the last move. Negative = position worsened. */
   lastMoveEvalDrop?: number
+  /** Single top hanging piece in "R@5e" format. */
+  hangedPiece?: string
 }
 
 function isGeminiEmotion(v: unknown): v is GeminiEmotion {
@@ -79,8 +82,8 @@ function scoreToEvalContext(
   const abs = Math.abs(cp)
 
   let ctx = 'approximately equal'
-  if (abs < 100) ctx = 'slight edge'
-  else if (abs < 300) ctx = 'clear advantage'
+  if (abs < 300) ctx = 'slight edge'
+  else if (abs < 800) ctx = 'clear advantage'
   else if (abs < 2000) ctx = 'large advantage'
   else ctx = 'decisive advantage'
 
@@ -118,6 +121,10 @@ function buildPrompt(ctx: GeminiCoachContext): string {
   const s = ctx.settings
   const e = ctx.engine
   const b = ctx.board
+  const sfen = e.sfen.trim()
+
+  const bestmoveFull = e.bestmove && sfen.length > 0 ? toFullUsiMove(e.bestmove, sfen) : e.bestmove
+  const ponderFull = e.ponder && sfen.length > 0 ? toFullUsiMove(e.ponder, sfen) : e.ponder
 
   const scoreInfo = scoreToEvalContext(e.score)
   const targetWordCount = randomIntInclusive(5, 30)
@@ -145,10 +152,10 @@ function buildPrompt(ctx: GeminiCoachContext): string {
     lines.push(`    - Coach Personality: "${ctx.coach.personalityPrompt.trim()}"`)
   }
 
-  if (e.sfen.trim().length > 0) lines.push(`    - sfen: "${e.sfen.trim()}"`)
+  if (sfen.length > 0) lines.push(`    - sfen: "${sfen}"`)
   if (b?.playerColor) lines.push(`    - Player side: "${b.playerColor}"`)
   if (b?.sideLastMove) lines.push(`    - Side Last Move: "${b.sideLastMove}"`)
-  if (b?.lastMove) lines.push(`    - Last Move (USI): "${b.lastMove}"`)
+  if (b?.lastMove) lines.push(`    - Last Move: ${b.lastMove}`)
 
   // Add move quality information
   if (b?.lastMoveQuality && b.lastMoveQuality !== 'unknown') {
@@ -166,7 +173,7 @@ function buildPrompt(ctx: GeminiCoachContext): string {
         lines.push('    - The last move was the best move. Acknowledge the good play.')
         break
       case 'good':
-        lines.push('    - The last move was solid, close to best.')
+        lines.push('    - The last move was solid.')
         break
       case 'inaccuracy':
         lines.push('    - The last move was slightly inaccurate.')
@@ -188,11 +195,11 @@ function buildPrompt(ctx: GeminiCoachContext): string {
   if (b?.sideToMove) lines.push(`    - Side To Move: "${b.sideToMove}"`)
 
   if (scoreInfo) {
-    lines.push(`    - Eval: ${scoreInfo.evalScoreText} (cp) -> ${scoreInfo.evalContext}`)
+    lines.push(`    - Eval: ${scoreInfo.evalScoreText} -> ${scoreInfo.evalContext}`)
   }
 
-  if (e.bestmove) lines.push(`    - Best Move for side to move: ${e.bestmove}`)
-  if (e.ponder) lines.push(`    - Ponder: ${e.ponder}`)
+  if (bestmoveFull) lines.push(`    - Best Move for side to move: ${bestmoveFull}`)
+  if (ponderFull) lines.push(`    - Ponder: ${ponderFull}`)
 
   if (e.pv && e.pv.length > 0) lines.push(`    - PV: ${e.pv.join(' ')}`)
 
@@ -209,6 +216,10 @@ function buildPrompt(ctx: GeminiCoachContext): string {
   if (b?.isOnlyMove) {
     lines.push('    - FORCED MOVE: This is the ONLY legal move (typically responding to check).')
     lines.push('    - No alternative moves.')
+  }
+
+  if (b?.hangedPiece && b.hangedPiece.trim().length > 0) {
+    lines.push(`    - Hanging piece for side last move: ${b.hangedPiece.trim()}`)
   }
 
   lines.push('')
