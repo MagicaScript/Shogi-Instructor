@@ -38,15 +38,19 @@ type HistoryCell =
   | { status: 'done'; text: string }
   | { status: 'error'; message: string }
 
+type LLMState = 'idle' | 'loading' | 'success' | 'error'
+
 type Data = {
   coach: BotCoach
   loadError: string
-  playerSpeech: string
-  opponentSpeech: string
   playerLLMError: string
   opponentLLMError: string
   playerLLMLoading: boolean
   opponentLLMLoading: boolean
+  playerLLMState: LLMState
+  opponentLLMState: LLMState
+  playerLastSuccessText: string
+  opponentLastSuccessText: string
   state: SettingsState
   unsub: null | (() => void)
   playerMeta: EngineAnalysisPayload | null
@@ -88,12 +92,14 @@ export default defineComponent({
     return {
       coach: new BotCoach(),
       loadError: '',
-      playerSpeech: 'Waiting for analysis...',
-      opponentSpeech: 'Waiting for analysis...',
       playerLLMError: '',
       opponentLLMError: '',
       playerLLMLoading: false,
       opponentLLMLoading: false,
+      playerLLMState: 'idle' as LLMState,
+      opponentLLMState: 'idle' as LLMState,
+      playerLastSuccessText: '',
+      opponentLastSuccessText: '',
       state: settingsStore.getState(),
       unsub: null,
       playerMeta: null,
@@ -199,7 +205,7 @@ export default defineComponent({
 
     isPlaceholderSpeech(v: string): boolean {
       const t = v.trim().toLowerCase()
-      return t.length === 0 || t.startsWith('waiting for')
+      return t.length === 0 || t.startsWith('waiting for') || t.startsWith('thinking')
     },
 
     getHistoryListEl(): HTMLElement | null {
@@ -305,12 +311,10 @@ export default defineComponent({
 
       if (lastMover === 'player') {
         this.playerMeta = analysis
-        if (this.isPlaceholderSpeech(this.playerSpeech))
-          this.playerSpeech = this.coach.getPhrase(analysis)
+        this.resetLLMStateFor('player')
       } else {
         this.opponentMeta = analysis
-        if (this.isPlaceholderSpeech(this.opponentSpeech))
-          this.opponentSpeech = this.coach.getPhrase(analysis)
+        this.resetLLMStateFor('opponent')
       }
     },
 
@@ -486,36 +490,114 @@ export default defineComponent({
 
     onPlayerLLMResult(out: LLMCoachResponse) {
       this.playerLLMError = ''
-      this.playerSpeech = out.text
+      this.playerLastSuccessText = out.text
+      this.playerLLMState = 'success'
       this.resolvePendingHistory('player', out.text)
     },
 
     onOpponentLLMResult(out: LLMCoachResponse) {
       this.opponentLLMError = ''
-      this.opponentSpeech = out.text
+      this.opponentLastSuccessText = out.text
+      this.opponentLLMState = 'success'
       this.resolvePendingHistory('opponent', out.text)
     },
 
     onPlayerLLMError(msg: string) {
       this.playerLLMError = msg
+      this.playerLLMState = 'error'
       this.failPendingHistory('player', msg)
-      if (this.playerMeta) this.playerSpeech = this.coach.getPhrase(this.playerMeta)
     },
 
     onOpponentLLMError(msg: string) {
       this.opponentLLMError = msg
+      this.opponentLLMState = 'error'
       this.failPendingHistory('opponent', msg)
-      if (this.opponentMeta) this.opponentSpeech = this.coach.getPhrase(this.opponentMeta)
     },
 
     onPlayerLLMLoading(v: boolean) {
       this.playerLLMLoading = v
+      if (v) this.playerLLMState = 'loading'
+      else if (this.playerLLMState === 'loading') {
+        if (this.playerLLMError) this.playerLLMState = 'error'
+        else if (this.playerLastSuccessText.trim().length > 0) this.playerLLMState = 'success'
+        else this.playerLLMState = 'idle'
+      }
       if (v) this.createPendingHistory('player')
     },
 
     onOpponentLLMLoading(v: boolean) {
       this.opponentLLMLoading = v
+      if (v) this.opponentLLMState = 'loading'
+      else if (this.opponentLLMState === 'loading') {
+        if (this.opponentLLMError) this.opponentLLMState = 'error'
+        else if (this.opponentLastSuccessText.trim().length > 0) this.opponentLLMState = 'success'
+        else this.opponentLLMState = 'idle'
+      }
       if (v) this.createPendingHistory('opponent')
+    },
+
+    resetLLMStateFor(source: HistoryItem['source']) {
+      if (source === 'player') {
+        this.playerLLMError = ''
+        if (this.playerLLMState !== 'loading') this.playerLLMState = 'idle'
+      } else {
+        this.opponentLLMError = ''
+        if (this.opponentLLMState !== 'loading') this.opponentLLMState = 'idle'
+      }
+    },
+
+    displaySpeechText(source: HistoryItem['source']): string {
+      if (source === 'player') {
+        if (this.playerLLMState === 'idle') return 'Waiting for analysis...'
+        if (this.playerLLMState === 'success' || this.playerLLMState === 'loading') {
+          const t = this.playerLastSuccessText.trim()
+          return t.length > 0 ? t : 'Thinking'
+        }
+        if (this.playerLLMState === 'error') {
+          const t = this.playerLastSuccessText.trim()
+          return t.length > 0 ? t : 'Thinking'
+        }
+        return 'Thinking'
+      }
+
+      if (this.opponentLLMState === 'idle') return 'Waiting for analysis...'
+      if (this.opponentLLMState === 'success' || this.opponentLLMState === 'loading') {
+        const t = this.opponentLastSuccessText.trim()
+        return t.length > 0 ? t : 'Thinking'
+      }
+      if (this.opponentLLMState === 'error') {
+        const t = this.opponentLastSuccessText.trim()
+        return t.length > 0 ? t : 'Thinking'
+      }
+      return 'Thinking'
+    },
+
+    showThinking(source: HistoryItem['source']): boolean {
+      if (source === 'player') {
+        if (this.playerLLMError) return false
+        const last = this.playerLastSuccessText.trim()
+        return this.playerLLMState === 'loading' && last.length === 0
+      }
+
+      if (this.opponentLLMError) return false
+      const last = this.opponentLastSuccessText.trim()
+      return this.opponentLLMState === 'loading' && last.length === 0
+    },
+
+    showSpinner(source: HistoryItem['source']): boolean {
+      if (source === 'player') {
+        return (
+          this.playerLLMState === 'loading' &&
+          this.playerLastSuccessText.trim().length > 0 &&
+          !this.playerLLMError
+        )
+      }
+
+      return (
+        this.opponentLLMState === 'loading' &&
+        this.opponentLastSuccessText.trim().length > 0 &&
+        !this.opponentLLMError
+      )
     },
   },
 })
@@ -540,13 +622,29 @@ export default defineComponent({
       <div class="speech-box">
         <div class="speech-title">After Player move</div>
         <div v-if="playerLLMError" class="error">{{ playerLLMError }}</div>
-        <div class="speech mono">{{ playerSpeech }}</div>
+        <div class="speech mono">
+          <span class="speech-text" :class="{ blink: showThinking('player') }">
+            {{ displaySpeechText('player') }}
+          </span>
+          <span v-if="showThinking('player')" class="thinking-dots" aria-hidden="true">
+            <span class="dot">·</span><span class="dot">·</span><span class="dot">·</span>
+          </span>
+          <span v-if="showSpinner('player')" class="loading-spinner" aria-hidden="true"></span>
+        </div>
       </div>
 
       <div class="speech-box">
         <div class="speech-title">After Opponent move</div>
         <div v-if="opponentLLMError" class="error">{{ opponentLLMError }}</div>
-        <div class="speech mono">{{ opponentSpeech }}</div>
+        <div class="speech mono">
+          <span class="speech-text" :class="{ blink: showThinking('opponent') }">
+            {{ displaySpeechText('opponent') }}
+          </span>
+          <span v-if="showThinking('opponent')" class="thinking-dots" aria-hidden="true">
+            <span class="dot">·</span><span class="dot">·</span><span class="dot">·</span>
+          </span>
+          <span v-if="showSpinner('opponent')" class="loading-spinner" aria-hidden="true"></span>
+        </div>
       </div>
 
       <div class="history-card">
@@ -743,6 +841,79 @@ export default defineComponent({
   white-space: pre-wrap;
   word-break: break-word;
   color: $text-primary;
+}
+
+.speech-text.blink {
+  animation: speech-blink 1.4s ease-in-out infinite;
+}
+
+.thinking-dots {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 4px;
+}
+
+.thinking-dots .dot {
+  opacity: 0.2;
+  animation: thinking-dots 1.2s ease-in-out infinite;
+
+  &:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  &:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-left: 8px;
+  border-radius: 50%;
+  border: 2px solid $border-subtle;
+  border-top-color: $accent-primary;
+  animation:
+    spinner-rotate 1s linear infinite,
+    spinner-breathe 1.6s ease-in-out infinite;
+  vertical-align: -2px;
+}
+
+@keyframes thinking-dots {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes speech-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spinner-breathe {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .history-card {

@@ -1,6 +1,7 @@
 <script lang="ts">
 import { defineComponent } from 'vue'
-import { YaneuraOuEngine, type AnalyzeResult, type UsiInfo } from '@/logic/yaneuraOuEngine'
+import { YaneuraOuEngineQueue } from '@/logic/yaneuraOuEngineQueue'
+import type { AnalyzeResult, UsiInfo } from '@/logic/yaneuraOuEngine'
 import type { EngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import { isEngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import { normalizeScore } from '@/schemes/usi'
@@ -8,7 +9,7 @@ import { normalizeScore } from '@/schemes/usi'
 type EngineStatus = 'idle' | 'loading' | 'ready' | 'analyzing' | 'error'
 
 type Data = {
-  engine: YaneuraOuEngine
+  engine: YaneuraOuEngineQueue
   status: EngineStatus
   errorMsg: string
   result: AnalyzeResult | null
@@ -16,6 +17,7 @@ type Data = {
   logLines: string[]
   cancelLogListener: (() => void) | null
   lastSfenAnalyzed: string
+  lastSfenQueued: string
   cancelInfoTap: (() => void) | null
   logsOpen: boolean
 }
@@ -35,7 +37,7 @@ export default defineComponent({
 
   data(): Data {
     return {
-      engine: new YaneuraOuEngine(),
+      engine: new YaneuraOuEngineQueue(),
       status: 'idle',
       errorMsg: '',
       result: null,
@@ -43,6 +45,7 @@ export default defineComponent({
       logLines: [],
       cancelLogListener: null,
       lastSfenAnalyzed: '',
+      lastSfenQueued: '',
       cancelInfoTap: null,
       logsOpen: false,
     }
@@ -99,6 +102,7 @@ export default defineComponent({
       this.result = null
       this.lastInfo = null
       this.lastSfenAnalyzed = ''
+      this.lastSfenQueued = ''
 
       try {
         this.cancelLogListener?.()
@@ -117,9 +121,11 @@ export default defineComponent({
     async runAnalysis(sfen: string) {
       const trimmed = sfen.trim()
       if (trimmed.length === 0) return
-      if (this.status !== 'ready') return
+      if (this.status !== 'ready' && this.status !== 'analyzing') return
       if (trimmed === this.lastSfenAnalyzed) return
+      if (trimmed === this.lastSfenQueued) return
 
+      this.lastSfenQueued = trimmed
       this.status = 'analyzing'
       this.errorMsg = ''
       this.result = null
@@ -134,7 +140,7 @@ export default defineComponent({
       })
 
       try {
-        const r = await this.engine.analyze({
+        const r = await this.engine.enqueueAnalysis({
           sfen: trimmed,
           depth: this.depth,
           movetimeMs: this.movetimeMs,
@@ -143,7 +149,7 @@ export default defineComponent({
         this.result = r
         this.lastInfo = r.lastInfo ?? null
         this.lastSfenAnalyzed = trimmed
-        this.status = 'ready'
+        if (trimmed === this.lastSfenQueued) this.status = 'ready'
 
         const payload: EngineAnalysisPayload = {
           sfen: trimmed,
