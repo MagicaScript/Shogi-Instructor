@@ -1,4 +1,4 @@
-/* src/logic/geminiService.ts */
+/* src/logic/llmService.ts */
 
 import { settingsStore, type CoachProfile, type TextLanguage } from '@/schemes/settings'
 import type { EngineAnalysisPayload } from '@/schemes/engineAnalysis'
@@ -8,15 +8,15 @@ import type { MoveQuality } from '@/schemes/moveHistory'
 import { moveQualityLabel } from '@/logic/moveQuality'
 import { toFullUsiMove } from '@/utils/sfenUtils'
 
-export type GeminiEmotion = 'happy' | 'neutral' | 'concerned' | 'excited'
+export type LLMEmotion = 'happy' | 'neutral' | 'concerned' | 'excited'
 
-export type GeminiCoachResponse = {
+export type LLMCoachResponse = {
   text: string
   audioText: string
-  emotion: GeminiEmotion
+  emotion: LLMEmotion
 }
 
-export type GeminiCoachContext = {
+export type LLMCoachContext = {
   coach: CoachProfile
   settings: {
     textLanguage: TextLanguage
@@ -29,10 +29,10 @@ export type GeminiCoachContext = {
     score?: Score
     pv?: string[]
   }
-  board?: GeminiBoardContext
+  board?: LLMBoardContext
 }
 
-export type GeminiBoardContext = {
+export type LLMBoardContext = {
   playerColor?: string
   sideLastMove?: string
   sideToMove?: string
@@ -50,18 +50,18 @@ export type GeminiBoardContext = {
   hangedPiece?: string
 }
 
-function isGeminiEmotion(v: unknown): v is GeminiEmotion {
+function isLLMEmotion(v: unknown): v is LLMEmotion {
   return v === 'happy' || v === 'neutral' || v === 'concerned' || v === 'excited'
 }
 
-function isGeminiCoachResponse(v: unknown): v is GeminiCoachResponse {
+function isLLMCoachResponse(v: unknown): v is LLMCoachResponse {
   if (!isObject(v)) return false
   return (
     typeof v.text === 'string' &&
     v.text.trim().length > 0 &&
     typeof v.audioText === 'string' &&
     v.audioText.trim().length > 0 &&
-    isGeminiEmotion(v.emotion)
+    isLLMEmotion(v.emotion)
   )
 }
 
@@ -122,7 +122,7 @@ function randomIntInclusive(min: number, max: number): number {
   return lo + Math.floor(Math.random() * range)
 }
 
-function buildPrompt(ctx: GeminiCoachContext): string {
+function buildPrompt(ctx: LLMCoachContext): string {
   const s = ctx.settings
   const e = ctx.engine
   const b = ctx.board
@@ -242,7 +242,7 @@ function buildPrompt(ctx: GeminiCoachContext): string {
   return lines.join('\n')
 }
 
-type GeminiGenerateResponse = {
+type LLMGenerateResponse = {
   candidates?: Array<{
     content?: {
       parts?: Array<{ text?: string }>
@@ -251,11 +251,11 @@ type GeminiGenerateResponse = {
   error?: { message?: string }
 }
 
-function isGeminiGenerateResponse(v: unknown): v is GeminiGenerateResponse {
+function isLLMGenerateResponse(v: unknown): v is LLMGenerateResponse {
   return isObject(v)
 }
 
-function extractCandidateText(json: GeminiGenerateResponse): string {
+function extractCandidateText(json: LLMGenerateResponse): string {
   const parts = json.candidates?.[0]?.content?.parts ?? []
   const texts = parts.map((p) => p.text).filter((t): t is string => typeof t === 'string')
   return texts.join('\n')
@@ -283,15 +283,15 @@ function tryParseJsonObject(text: string): unknown {
   }
 }
 
-export async function requestGeminiCoach(ctx: GeminiCoachContext): Promise<GeminiCoachResponse> {
-  const apiKey = settingsStore.getGeminiApiKey()
-  if (!apiKey) throw new Error('Missing Gemini API key (cookies).')
+export async function requestLLMCoach(ctx: LLMCoachContext): Promise<LLMCoachResponse> {
+  const apiKey = settingsStore.getLLMApiKey()
+  if (!apiKey) throw new Error('Missing LLM API key (cookies).')
 
   const state = settingsStore.getState()
-  const baseUrl = state.geminiBaseUrl.trim()
-  const modelName = state.geminiModelName.trim()
-  if (baseUrl.length === 0) throw new Error('Missing Gemini Base URL.')
-  if (modelName.length === 0) throw new Error('Missing Gemini Model Name.')
+  const baseUrl = state.llmBaseUrl.trim()
+  const modelName = state.llmModelName.trim()
+  if (baseUrl.length === 0) throw new Error('Missing LLM Base URL.')
+  if (modelName.length === 0) throw new Error('Missing LLM Model Name.')
 
   const prompt = buildPrompt(ctx)
   const url = `${baseUrl}/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`
@@ -314,24 +314,24 @@ export async function requestGeminiCoach(ctx: GeminiCoachContext): Promise<Gemin
 
   if (!res.ok) {
     const msg =
-      isGeminiGenerateResponse(json) && json.error && typeof json.error.message === 'string'
+      isLLMGenerateResponse(json) && json.error && typeof json.error.message === 'string'
         ? json.error.message
-        : `Gemini HTTP ${res.status}`
+        : `LLM HTTP ${res.status}`
     throw new Error(msg)
   }
 
-  if (!isGeminiGenerateResponse(json)) throw new Error('Invalid Gemini response.')
+  if (!isLLMGenerateResponse(json)) throw new Error('Invalid LLM response.')
 
   const rawText = extractCandidateText(json)
-  if (rawText.trim().length === 0) throw new Error('Gemini returned empty text.')
+  if (rawText.trim().length === 0) throw new Error('LLM returned empty text.')
 
   const maybeJson = tryParseJsonObject(rawText)
-  if (maybeJson && isGeminiCoachResponse(maybeJson)) return maybeJson
+  if (maybeJson && isLLMCoachResponse(maybeJson)) return maybeJson
 
   const text = rawText.trim()
   const audioText = text.trim()
 
-  if (text.length === 0 || audioText.length === 0) throw new Error('Gemini returned empty text.')
+  if (text.length === 0 || audioText.length === 0) throw new Error('LLM returned empty text.')
 
   return { text, audioText, emotion: 'neutral' }
 }
@@ -340,8 +340,8 @@ export function makeContextFromAnalysis(
   analysis: EngineAnalysisPayload,
   coach: CoachProfile,
   settings: { textLanguage: TextLanguage; audioLanguage: TextLanguage },
-  board?: GeminiBoardContext,
-): GeminiCoachContext {
+  board?: LLMBoardContext,
+): LLMCoachContext {
   return {
     coach,
     settings,

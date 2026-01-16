@@ -6,7 +6,7 @@ import {
   coerceYaneuraOuParam,
   isYaneuraOuParam,
   type YaneuraOuParam,
-} from '@/schemes/YaneuraOuParam'
+} from '@/schemes/yaneuraOuParam'
 import { isObject } from '@/utils/typeGuards'
 
 export const TEXT_LANGUAGES = ['English', 'Japanese', 'Chinese'] as const
@@ -22,8 +22,8 @@ export type CoachProfile = {
 }
 
 export type SettingsState = {
-  geminiBaseUrl: string
-  geminiModelName: string
+  llmBaseUrl: string
+  llmModelName: string
   textLanguage: TextLanguage
   audioLanguage: TextLanguage
   coachId: string
@@ -31,8 +31,8 @@ export type SettingsState = {
 }
 
 const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com'
-const DEFAULT_MODEL_NAME = 'gemini-3-flash-preview'
-const API_KEY_COOKIE = 'gemini_api_key'
+const DEFAULT_MODEL_NAME = 'llm-3-flash-preview'
+const API_KEY_COOKIE = 'llm_api_key'
 const STORAGE_KEY = 'lishogi_botcoach_settings_v1'
 
 const DEFAULT_COACHES: readonly CoachProfile[] = [
@@ -95,10 +95,10 @@ export function isCoachProfile(v: unknown): v is CoachProfile {
 export function isSettingsState(v: unknown): v is SettingsState {
   if (!isObject(v)) return false
   return (
-    typeof v.geminiBaseUrl === 'string' &&
-    v.geminiBaseUrl.trim().length > 0 &&
-    typeof v.geminiModelName === 'string' &&
-    v.geminiModelName.trim().length > 0 &&
+    typeof v.llmBaseUrl === 'string' &&
+    v.llmBaseUrl.trim().length > 0 &&
+    typeof v.llmModelName === 'string' &&
+    v.llmModelName.trim().length > 0 &&
     isTextLanguage(v.textLanguage) &&
     isTextLanguage(v.audioLanguage) &&
     typeof v.coachId === 'string' &&
@@ -154,8 +154,8 @@ function clampString(input: string, maxLen: number): string {
 
 function makeDefaultState(): SettingsState {
   return {
-    geminiBaseUrl: DEFAULT_BASE_URL,
-    geminiModelName: DEFAULT_MODEL_NAME,
+    llmBaseUrl: DEFAULT_BASE_URL,
+    llmModelName: DEFAULT_MODEL_NAME,
     textLanguage: 'English',
     audioLanguage: 'English',
     coachId: DEFAULT_COACHES[0]?.id ?? 'calm-sensei',
@@ -169,15 +169,15 @@ function coerceSettingsState(raw: unknown): SettingsState {
 
   const r = raw as Record<string, unknown>
 
-  const geminiBaseUrl =
-    typeof r.geminiBaseUrl === 'string' && r.geminiBaseUrl.trim().length > 0
-      ? r.geminiBaseUrl.trim()
-      : base.geminiBaseUrl
+  const llmBaseUrl =
+    typeof r.llmBaseUrl === 'string' && r.llmBaseUrl.trim().length > 0
+      ? r.llmBaseUrl.trim()
+      : base.llmBaseUrl
 
-  const geminiModelName =
-    typeof r.geminiModelName === 'string' && r.geminiModelName.trim().length > 0
-      ? r.geminiModelName.trim()
-      : base.geminiModelName
+  const llmModelName =
+    typeof r.llmModelName === 'string' && r.llmModelName.trim().length > 0
+      ? r.llmModelName.trim()
+      : base.llmModelName
 
   const textLanguage = isTextLanguage(r.textLanguage) ? r.textLanguage : base.textLanguage
   const audioLanguage = isTextLanguage(r.audioLanguage) ? r.audioLanguage : base.audioLanguage
@@ -187,7 +187,7 @@ function coerceSettingsState(raw: unknown): SettingsState {
 
   const yaneuraOu = coerceYaneuraOuParam(r.yaneuraOu, base.yaneuraOu)
 
-  return { geminiBaseUrl, geminiModelName, textLanguage, audioLanguage, coachId, yaneuraOu }
+  return { llmBaseUrl, llmModelName, textLanguage, audioLanguage, coachId, yaneuraOu }
 }
 
 type Listener = (state: SettingsState) => void
@@ -244,20 +244,20 @@ export class SettingsStore {
     this.update({ yaneuraOu: next })
   }
 
-  setGeminiApiKey(apiKey: string): void {
+  setLLMApiKey(apiKey: string): void {
     const key = clampString(apiKey, 512)
     if (key.length === 0) return
     setCookie(API_KEY_COOKIE, key, 365)
   }
 
-  getGeminiApiKey(): string | null {
+  getLLMApiKey(): string | null {
     const v = getCookie(API_KEY_COOKIE)
     if (!v) return null
     const k = v.trim()
     return k.length > 0 ? k : null
   }
 
-  clearGeminiApiKey(): void {
+  clearLLMApiKey(): void {
     deleteCookie(API_KEY_COOKIE)
   }
 

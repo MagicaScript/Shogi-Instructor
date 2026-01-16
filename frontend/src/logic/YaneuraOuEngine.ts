@@ -7,7 +7,7 @@ import {
   coerceYaneuraOuParam,
   type YaneuraOuOptionDef,
   type YaneuraOuParam,
-} from '@/schemes/YaneuraOuParam'
+} from '@/schemes/yaneuraOuParam'
 import type { Score } from '@/schemes/usi'
 
 export type UsiInfo = {

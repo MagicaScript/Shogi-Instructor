@@ -3,11 +3,7 @@ import { defineComponent } from 'vue'
 import type { EngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import { isEngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import { settingsStore, type CoachProfile, type SettingsState } from '@/schemes/settings'
-import {
-  makeContextFromAnalysis,
-  requestGeminiCoach,
-  type GeminiCoachResponse,
-} from '@/logic/geminiService'
+import { makeContextFromAnalysis, requestLLMCoach, type LLMCoachResponse } from '@/logic/llmService'
 import { isNonEmptyString } from '@/utils/typeGuards'
 import type { MoveQuality } from '@/schemes/moveHistory'
 import { isMoveQuality } from '@/schemes/moveHistory'
@@ -38,7 +34,7 @@ type Props = {
 type Data = {
   loading: boolean
   lastError: string
-  lastResult: GeminiCoachResponse | null
+  lastResult: LLMCoachResponse | null
   unsub: null | (() => void)
   state: SettingsState
 }
@@ -64,7 +60,7 @@ function mergeCoach(base: CoachProfile | null, p: Props): CoachProfile | null {
 }
 
 export default defineComponent({
-  name: 'GeminiService',
+  name: 'LLMService',
 
   props: {
     analysis: { type: Object as () => Props['analysis'], default: null },
@@ -90,7 +86,7 @@ export default defineComponent({
   },
 
   emits: {
-    result: (v: GeminiCoachResponse) => typeof v === 'object' && v !== null,
+    result: (v: LLMCoachResponse) => typeof v === 'object' && v !== null,
     error: (msg: string) => typeof msg === 'string',
     loading: (v: boolean) => typeof v === 'boolean',
   },
@@ -191,7 +187,7 @@ export default defineComponent({
       this.$emit('loading', true)
 
       try {
-        const out = await requestGeminiCoach(ctx)
+        const out = await requestLLMCoach(ctx)
         this.lastResult = out
         this.$emit('result', out)
       } catch (e: unknown) {
@@ -208,9 +204,9 @@ export default defineComponent({
 </script>
 
 <template>
-  <section class="gemini-service">
+  <section class="llm-service">
     <div class="row">
-      <div class="label">Gemini</div>
+      <div class="label">LLM</div>
       <div class="value">
         <span v-if="loading">Generating…</span>
         <span v-else-if="lastError" class="err">{{ lastError }}</span>
@@ -224,7 +220,7 @@ export default defineComponent({
 <style scoped lang="scss">
 @use '@/styles/design.scss' as *;
 
-.gemini-service {
+.llm-service {
   display: none;
 }
 </style>

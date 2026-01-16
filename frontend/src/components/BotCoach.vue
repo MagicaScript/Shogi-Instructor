@@ -3,9 +3,9 @@ import { defineComponent } from 'vue'
 import type { EngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import { isEngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import { BotCoach } from '@/logic/botCoach'
-import GeminiService from '@/components/GeminiService.vue'
+import LLMService from '@/components/LLMService.vue'
 import { settingsStore, type CoachProfile, type SettingsState } from '@/schemes/settings'
-import type { GeminiCoachResponse } from '@/logic/geminiService'
+import type { LLMCoachResponse } from '@/logic/llmService'
 import type { GameInfo, PlayerColor } from '@/schemes/gameInfo'
 import { getSideToMoveFromSfen, oppositeColor } from '@/schemes/gameInfo'
 import { scoreToKey } from '@/schemes/usi'
@@ -43,10 +43,10 @@ type Data = {
   loadError: string
   playerSpeech: string
   opponentSpeech: string
-  playerGeminiError: string
-  opponentGeminiError: string
-  playerGeminiLoading: boolean
-  opponentGeminiLoading: boolean
+  playerLLMError: string
+  opponentLLMError: string
+  playerLLMLoading: boolean
+  opponentLLMLoading: boolean
   state: SettingsState
   unsub: null | (() => void)
   playerMeta: EngineAnalysisPayload | null
@@ -75,7 +75,7 @@ type Data = {
 export default defineComponent({
   name: 'BotCoach',
 
-  components: { GeminiService },
+  components: { LLMService },
 
   props: {
     analysis: { type: Object as () => Props['analysis'], default: null },
@@ -90,10 +90,10 @@ export default defineComponent({
       loadError: '',
       playerSpeech: 'Waiting for analysis...',
       opponentSpeech: 'Waiting for analysis...',
-      playerGeminiError: '',
-      opponentGeminiError: '',
-      playerGeminiLoading: false,
-      opponentGeminiLoading: false,
+      playerLLMError: '',
+      opponentLLMError: '',
+      playerLLMLoading: false,
+      opponentLLMLoading: false,
       state: settingsStore.getState(),
       unsub: null,
       playerMeta: null,
@@ -472,7 +472,7 @@ export default defineComponent({
         this.opponentLastMoveEvalDrop = null
       }
 
-      // Extract USI move strings for passing to Gemini
+      // Extract USI move strings for passing to LLM
       this.playerLastMove = lastPlayerEntry?.usiMoveFull ?? lastPlayerEntry?.usiMove ?? ''
       this.opponentLastMove = lastOpponentEntry?.usiMoveFull ?? lastOpponentEntry?.usiMove ?? ''
     },
@@ -484,37 +484,37 @@ export default defineComponent({
       return moveQualityLabel(quality)
     },
 
-    onPlayerGeminiResult(out: GeminiCoachResponse) {
-      this.playerGeminiError = ''
+    onPlayerLLMResult(out: LLMCoachResponse) {
+      this.playerLLMError = ''
       this.playerSpeech = out.text
       this.resolvePendingHistory('player', out.text)
     },
 
-    onOpponentGeminiResult(out: GeminiCoachResponse) {
-      this.opponentGeminiError = ''
+    onOpponentLLMResult(out: LLMCoachResponse) {
+      this.opponentLLMError = ''
       this.opponentSpeech = out.text
       this.resolvePendingHistory('opponent', out.text)
     },
 
-    onPlayerGeminiError(msg: string) {
-      this.playerGeminiError = msg
+    onPlayerLLMError(msg: string) {
+      this.playerLLMError = msg
       this.failPendingHistory('player', msg)
       if (this.playerMeta) this.playerSpeech = this.coach.getPhrase(this.playerMeta)
     },
 
-    onOpponentGeminiError(msg: string) {
-      this.opponentGeminiError = msg
+    onOpponentLLMError(msg: string) {
+      this.opponentLLMError = msg
       this.failPendingHistory('opponent', msg)
       if (this.opponentMeta) this.opponentSpeech = this.coach.getPhrase(this.opponentMeta)
     },
 
-    onPlayerGeminiLoading(v: boolean) {
-      this.playerGeminiLoading = v
+    onPlayerLLMLoading(v: boolean) {
+      this.playerLLMLoading = v
       if (v) this.createPendingHistory('player')
     },
 
-    onOpponentGeminiLoading(v: boolean) {
-      this.opponentGeminiLoading = v
+    onOpponentLLMLoading(v: boolean) {
+      this.opponentLLMLoading = v
       if (v) this.createPendingHistory('opponent')
     },
   },
@@ -529,8 +529,8 @@ export default defineComponent({
         <div>
           <h2>{{ coachName }}</h2>
           <div v-if="loadError" class="error">{{ loadError }}</div>
-          <div v-else class="status" :class="{ on: playerGeminiLoading || opponentGeminiLoading }">
-            {{ playerGeminiLoading || opponentGeminiLoading ? 'Generating...' : 'Ready' }}
+          <div v-else class="status" :class="{ on: playerLLMLoading || opponentLLMLoading }">
+            {{ playerLLMLoading || opponentLLMLoading ? 'Generating...' : 'Ready' }}
           </div>
         </div>
       </div>
@@ -539,13 +539,13 @@ export default defineComponent({
     <div class="coach-body">
       <div class="speech-box">
         <div class="speech-title">After Player move</div>
-        <div v-if="playerGeminiError" class="error">{{ playerGeminiError }}</div>
+        <div v-if="playerLLMError" class="error">{{ playerLLMError }}</div>
         <div class="speech mono">{{ playerSpeech }}</div>
       </div>
 
       <div class="speech-box">
         <div class="speech-title">After Opponent move</div>
-        <div v-if="opponentGeminiError" class="error">{{ opponentGeminiError }}</div>
+        <div v-if="opponentLLMError" class="error">{{ opponentLLMError }}</div>
         <div class="speech mono">{{ opponentSpeech }}</div>
       </div>
 
@@ -574,7 +574,7 @@ export default defineComponent({
         </div>
       </div>
 
-      <GeminiService
+      <LLMService
         v-if="playerMeta && selectedCoach"
         :analysis="playerMeta"
         :coach-id="selectedCoach.id"
@@ -592,12 +592,12 @@ export default defineComponent({
         :last-move-eval-drop="playerLastMoveEvalDrop ?? undefined"
         :hanged-piece="hangedPieceFor(playerMeta)"
         position-text="Evaluate the player's last move."
-        @result="onPlayerGeminiResult"
-        @error="onPlayerGeminiError"
-        @loading="onPlayerGeminiLoading"
+        @result="onPlayerLLMResult"
+        @error="onPlayerLLMError"
+        @loading="onPlayerLLMLoading"
       />
 
-      <GeminiService
+      <LLMService
         v-if="opponentMeta && selectedCoach"
         :analysis="opponentMeta"
         :coach-id="selectedCoach.id"
@@ -615,9 +615,9 @@ export default defineComponent({
         :last-move-eval-drop="opponentLastMoveEvalDrop ?? undefined"
         :hanged-piece="hangedPieceFor(opponentMeta)"
         position-text="Explain your last move: purpose, threat, and how the player should respond."
-        @result="onOpponentGeminiResult"
-        @error="onOpponentGeminiError"
-        @loading="onOpponentGeminiLoading"
+        @result="onOpponentLLMResult"
+        @error="onOpponentLLMError"
+        @loading="onOpponentLLMLoading"
       />
 
       <details class="meta-panel">

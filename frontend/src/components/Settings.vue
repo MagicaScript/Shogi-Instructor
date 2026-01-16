@@ -14,7 +14,7 @@ import {
   YANEURAOU_OPTION_DEFS,
   type YaneuraOuOptionDef,
   type YaneuraOuParam,
-} from '@/schemes/YaneuraOuParam'
+} from '@/schemes/yaneuraOuParam'
 import { isNonEmptyString } from '@/utils/typeGuards'
 
 type Data = {
@@ -23,7 +23,7 @@ type Data = {
   apiKeyPresent: boolean
   saveMessage: string
   coaches: readonly CoachProfile[]
-  geminiOpen: boolean
+  llmOpen: boolean
   languageOpen: boolean
   coachOpen: boolean
   engineOpen: boolean
@@ -36,10 +36,10 @@ export default defineComponent({
     return {
       state: settingsStore.getState(),
       apiKeyInput: '',
-      apiKeyPresent: settingsStore.getGeminiApiKey() !== null,
+      apiKeyPresent: settingsStore.getLLMApiKey() !== null,
       saveMessage: '',
       coaches: settingsStore.getCoaches(),
-      geminiOpen: false,
+      llmOpen: false,
       languageOpen: false,
       coachOpen: true,
       engineOpen: false,
@@ -63,7 +63,7 @@ export default defineComponent({
   mounted() {
     const unsub = settingsStore.subscribe((s) => {
       this.state = s
-      this.apiKeyPresent = settingsStore.getGeminiApiKey() !== null
+      this.apiKeyPresent = settingsStore.getLLMApiKey() !== null
     })
     ;(this as unknown as { _unsubSettings?: () => void })._unsubSettings = unsub
   },
@@ -76,13 +76,13 @@ export default defineComponent({
   methods: {
     onChangeBaseUrl(v: string) {
       if (!isNonEmptyString(v)) return
-      settingsStore.update({ geminiBaseUrl: v.trim() })
+      settingsStore.update({ llmBaseUrl: v.trim() })
       this.flash('Saved.')
     },
 
     onChangeModelName(v: string) {
       if (!isNonEmptyString(v)) return
-      settingsStore.update({ geminiModelName: v.trim() })
+      settingsStore.update({ llmModelName: v.trim() })
       this.flash('Saved.')
     },
 
@@ -109,14 +109,14 @@ export default defineComponent({
     saveApiKey() {
       const k = this.apiKeyInput.trim()
       if (k.length === 0) return
-      settingsStore.setGeminiApiKey(k)
+      settingsStore.setLLMApiKey(k)
       this.apiKeyInput = ''
       this.apiKeyPresent = true
       this.flash('API Key saved.')
     },
 
     clearApiKey() {
-      settingsStore.clearGeminiApiKey()
+      settingsStore.clearLLMApiKey()
       this.apiKeyInput = ''
       this.apiKeyPresent = false
       this.flash('API Key cleared.')
@@ -124,8 +124,8 @@ export default defineComponent({
 
     resetDefaults() {
       settingsStore.update({
-        geminiBaseUrl: SETTINGS_DEFAULTS.baseUrl,
-        geminiModelName: SETTINGS_DEFAULTS.modelName,
+        llmBaseUrl: SETTINGS_DEFAULTS.baseUrl,
+        llmModelName: SETTINGS_DEFAULTS.modelName,
         textLanguage: 'English',
         audioLanguage: 'English',
         coachId: settingsStore.getCoaches()[0]?.id ?? 'calm-sensei',
@@ -271,11 +271,11 @@ export default defineComponent({
     </div>
 
     <div class="section">
-      <button class="section-toggle" type="button" @click="geminiOpen = !geminiOpen">
-        <span>Gemini API</span>
+      <button class="section-toggle" type="button" @click="llmOpen = !llmOpen">
+        <span>LLM API</span>
         <svg
           class="chevron"
-          :class="{ open: geminiOpen }"
+          :class="{ open: llmOpen }"
           width="16"
           height="16"
           viewBox="0 0 24 24"
@@ -286,12 +286,12 @@ export default defineComponent({
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
-      <div v-show="geminiOpen" class="section-body">
+      <div v-show="llmOpen" class="section-body">
         <div class="field">
           <label>Base URL</label>
           <input
             class="input mono"
-            :value="state.geminiBaseUrl"
+            :value="state.llmBaseUrl"
             placeholder="https://generativelanguage.googleapis.com"
             @change="onChangeBaseUrl(($event.target as HTMLInputElement).value)"
           />
@@ -301,7 +301,7 @@ export default defineComponent({
           <label>Model Name</label>
           <input
             class="input mono"
-            :value="state.geminiModelName"
+            :value="state.llmModelName"
             placeholder="gemini-3-flash-preview"
             @change="onChangeModelName(($event.target as HTMLInputElement).value)"
           />
