@@ -1,5 +1,3 @@
-/* src/logic/llmService.ts */
-
 import { settingsStore, type CoachProfile, type TextLanguage } from '@/schemes/settings'
 import type { EngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import type { Score } from '@/schemes/usi'
@@ -38,17 +36,14 @@ export type LLMBoardContext = {
   sideToMove?: string
   positionText?: string
   isUndo?: boolean
-  /** True when only one legal move exists (forced response to check). */
   isOnlyMove?: boolean
-  /** The last move in USI format (e.g. '7g7f', 'P*5e'). Applies to whichever side just moved. */
   lastMove?: string
-  /** Quality assessment of the last move (best, good, inaccuracy, mistake, blunder, forced, unknown). */
   lastMoveQuality?: MoveQuality
-  /** Eval drop for the last move. Negative = position worsened. */
   lastMoveEvalDrop?: number
-  /** Single top hanging piece in "R@5e" format. */
   hangedPiece?: string
 }
+
+const PROXY_BASE_URL = 'http://127.0.0.1:3080'
 
 function isLLMEmotion(v: unknown): v is LLMEmotion {
   return v === 'happy' || v === 'neutral' || v === 'concerned' || v === 'excited'
@@ -56,12 +51,13 @@ function isLLMEmotion(v: unknown): v is LLMEmotion {
 
 function isLLMCoachResponse(v: unknown): v is LLMCoachResponse {
   if (!isObject(v)) return false
+  const obj = v as Record<string, unknown>
   return (
-    typeof v.text === 'string' &&
-    v.text.trim().length > 0 &&
-    typeof v.audioText === 'string' &&
-    v.audioText.trim().length > 0 &&
-    isLLMEmotion(v.emotion)
+    typeof obj.text === 'string' &&
+    (obj.text as string).trim().length > 0 &&
+    typeof obj.audioText === 'string' &&
+    (obj.audioText as string).trim().length > 0 &&
+    isLLMEmotion(obj.emotion)
   )
 }
 
@@ -96,7 +92,6 @@ function scoreToEvalContext(
   return { evalScoreText: String(cp), evalContext: `${ctx} ${side}` }
 }
 
-/** Returns a random integer in the inclusive range [min, max]. */
 function randomIntInclusive(min: number, max: number): number {
   const lo = Math.ceil(min)
   const hi = Math.floor(max)
@@ -162,17 +157,14 @@ function buildPrompt(ctx: LLMCoachContext): string {
   if (b?.sideLastMove) lines.push(`    - Side Last Move: "${b.sideLastMove}"`)
   if (b?.lastMove) lines.push(`    - Last Move: ${b.lastMove}`)
 
-  // Add move quality information
   if (b?.lastMoveQuality && b.lastMoveQuality !== 'unknown') {
     const qualityLabel = moveQualityLabel(b.lastMoveQuality)
-    // Append eval drop if available (e.g. "Mistake (-1200)")
     const evalDropSuffix =
       typeof b.lastMoveEvalDrop === 'number'
         ? ` (${b.lastMoveEvalDrop >= 0 ? '+' : ''}${b.lastMoveEvalDrop})`
         : ''
     lines.push(`    - Quality of Last Move: ${qualityLabel}${evalDropSuffix}`)
 
-    // Add contextual guidance based on move quality
     switch (b.lastMoveQuality) {
       case 'best':
         lines.push('    - The last move was the best move. Acknowledge the good play.')
@@ -242,23 +234,25 @@ function buildPrompt(ctx: LLMCoachContext): string {
   return lines.join('\n')
 }
 
-type LLMGenerateResponse = {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{ text?: string }>
-    }
+type OpenAIMessage = {
+  role: string
+  content: string | null
+}
+
+type OpenAICompletionResponse = {
+  choices?: Array<{
+    message?: OpenAIMessage
   }>
   error?: { message?: string }
 }
 
-function isLLMGenerateResponse(v: unknown): v is LLMGenerateResponse {
+function isOpenAICompletionResponse(v: unknown): v is OpenAICompletionResponse {
   return isObject(v)
 }
 
-function extractCandidateText(json: LLMGenerateResponse): string {
-  const parts = json.candidates?.[0]?.content?.parts ?? []
-  const texts = parts.map((p) => p.text).filter((t): t is string => typeof t === 'string')
-  return texts.join('\n')
+function extractOpenAIText(json: OpenAICompletionResponse): string {
+  const content = json.choices?.[0]?.message?.content
+  return typeof content === 'string' ? content : ''
 }
 
 function tryParseJsonObject(text: string): unknown {
@@ -283,6 +277,22 @@ function tryParseJsonObject(text: string): unknown {
   }
 }
 
+/**
+ * Builds the proxied URL by extracting host and path from the original URL
+ * and forwarding it through the backend proxy.
+ */
+function buildProxyUrl(originalBaseUrl: string): string {
+  let urlObj: URL
+  try {
+    urlObj = new URL(originalBaseUrl)
+  } catch {
+    throw new Error('Invalid LLM Base URL.')
+  }
+
+  const pathSuffix = urlObj.pathname + urlObj.search
+  return `${PROXY_BASE_URL}/proxy/${urlObj.host}${pathSuffix}`
+}
+
 export async function requestLLMCoach(ctx: LLMCoachContext): Promise<LLMCoachResponse> {
   const apiKey = settingsStore.getLLMApiKey()
   if (!apiKey) throw new Error('Missing LLM API key (cookies).')
@@ -294,35 +304,37 @@ export async function requestLLMCoach(ctx: LLMCoachContext): Promise<LLMCoachRes
   if (modelName.length === 0) throw new Error('Missing LLM Model Name.')
 
   const prompt = buildPrompt(ctx)
-  const url = `${baseUrl}/v1beta/models/${encodeURIComponent(modelName)}:generateContent?key=${encodeURIComponent(apiKey)}`
+  const url = buildProxyUrl(baseUrl)
 
   const body = {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 1536,
-    },
+    model: modelName,
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.7,
+    max_tokens: 1536,
   }
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
     body: JSON.stringify(body),
   })
 
   const json: unknown = await res.json().catch(() => null)
 
   if (!res.ok) {
-    const msg =
-      isLLMGenerateResponse(json) && json.error && typeof json.error.message === 'string'
-        ? json.error.message
-        : `LLM HTTP ${res.status}`
+    let msg = `LLM HTTP ${res.status}`
+    if (isOpenAICompletionResponse(json) && json.error && typeof json.error.message === 'string') {
+      msg = json.error.message
+    }
     throw new Error(msg)
   }
 
-  if (!isLLMGenerateResponse(json)) throw new Error('Invalid LLM response.')
+  if (!isOpenAICompletionResponse(json)) throw new Error('Invalid LLM response.')
 
-  const rawText = extractCandidateText(json)
+  const rawText = extractOpenAIText(json)
   if (rawText.trim().length === 0) throw new Error('LLM returned empty text.')
 
   const maybeJson = tryParseJsonObject(rawText)

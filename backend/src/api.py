@@ -11,7 +11,8 @@ import base64
 import time
 from typing import Any, Dict, Optional
 
-from fastapi import FastAPI, Query, Response
+import httpx
+from fastapi import FastAPI, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -145,3 +146,70 @@ def get_current_state():
 def health_check():
     """Health check endpoint."""
     return {"status": "ok", "has_state": current_state is not None}
+
+
+@app.api_route(
+    "/proxy/{target_host:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
+)
+async def proxy_request(target_host: str, request: Request):
+    """
+    Proxy requests to external services.
+
+    The target URL is constructed as: https://{target_host}
+    Query parameters and request body are forwarded as-is.
+    """
+    query_string = str(request.url.query)
+    target_url = f"https://{target_host}"
+    if query_string:
+        target_url = f"{target_url}?{query_string}"
+
+    headers_to_forward: Dict[str, str] = {}
+    excluded_headers = {"host", "connection", "keep-alive", "transfer-encoding"}
+    for key, value in request.headers.items():
+        if key.lower() not in excluded_headers:
+            headers_to_forward[key] = value
+
+    body: Optional[bytes] = None
+    if request.method in ("POST", "PUT", "PATCH"):
+        body = await request.body()
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            resp = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=headers_to_forward,
+                content=body,
+            )
+
+            response_headers: Dict[str, str] = {}
+            excluded_response_headers = {
+                "content-encoding",
+                "content-length",
+                "transfer-encoding",
+                "connection",
+            }
+            for key, value in resp.headers.items():
+                if key.lower() not in excluded_response_headers:
+                    response_headers[key] = value
+
+            return Response(
+                content=resp.content,
+                status_code=resp.status_code,
+                headers=response_headers,
+                media_type=resp.headers.get("content-type"),
+            )
+
+        except httpx.TimeoutException:
+            return Response(
+                content=json.dumps({"error": "Proxy request timed out"}),
+                status_code=504,
+                media_type="application/json",
+            )
+        except httpx.RequestError as e:
+            return Response(
+                content=json.dumps({"error": f"Proxy request failed: {str(e)}"}),
+                status_code=502,
+                media_type="application/json",
+            )

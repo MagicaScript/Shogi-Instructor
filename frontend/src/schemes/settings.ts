@@ -30,8 +30,8 @@ export type SettingsState = {
   yaneuraOu: YaneuraOuParam
 }
 
-const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com'
-const DEFAULT_MODEL_NAME = 'llm-3-flash-preview'
+const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
+const DEFAULT_MODEL_NAME = 'gemini-3-flash-preview'
 const API_KEY_COOKIE = 'llm_api_key'
 const STORAGE_KEY = 'lishogi_botcoach_settings_v1'
 

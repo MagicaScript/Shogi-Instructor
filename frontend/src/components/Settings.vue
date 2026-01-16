@@ -292,7 +292,7 @@ export default defineComponent({
           <input
             class="input mono"
             :value="state.llmBaseUrl"
-            placeholder="https://generativelanguage.googleapis.com"
+            placeholder="https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
             @change="onChangeBaseUrl(($event.target as HTMLInputElement).value)"
           />
         </div>
