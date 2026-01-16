@@ -65,6 +65,11 @@ function isGeminiCoachResponse(v: unknown): v is GeminiCoachResponse {
   )
 }
 
+function isPlayerSideLastMove(sideLastMove?: string): boolean {
+  if (!sideLastMove) return false
+  return sideLastMove.toLowerCase().includes('player')
+}
+
 function scoreToEvalContext(
   score: Score | undefined,
 ): { evalScoreText: string; evalContext: string } | null {
@@ -198,10 +203,12 @@ function buildPrompt(ctx: GeminiCoachContext): string {
     lines.push(`    - Eval: ${scoreInfo.evalScoreText} -> ${scoreInfo.evalContext}`)
   }
 
-  if (bestmoveFull) lines.push(`    - Best Move for side to move: ${bestmoveFull}`)
-  if (ponderFull) lines.push(`    - Ponder: ${ponderFull}`)
+  if (!isPlayerSideLastMove(b?.sideLastMove)) {
+    if (bestmoveFull) lines.push(`    - Best Move for side to move: ${bestmoveFull}`)
+    if (ponderFull) lines.push(`    - Ponder: ${ponderFull}`)
 
-  if (e.pv && e.pv.length > 0) lines.push(`    - PV: ${e.pv.join(' ')}`)
+    if (e.pv && e.pv.length > 0) lines.push(`    - PV: ${e.pv.join(' ')}`)
+  }
 
   if (b?.positionText && b.positionText.trim().length > 0) {
     lines.push(`    - ${b.positionText.trim()}`)
@@ -225,10 +232,7 @@ function buildPrompt(ctx: GeminiCoachContext): string {
   lines.push('')
   lines.push('GUIDELINES:')
   lines.push('    1. Do NOT state any numeric evaluation score or specific move.')
-  lines.push(
-    '    2. Focus on the meaning of the last move (defense, attack, shape) and one concrete next idea.',
-  )
-  lines.push(`    3. Keep it concise: 1–2 sentences, about ${targetWordCount} words.`)
+  lines.push(`    2. Keep it concise: 1–2 sentences, about ${targetWordCount} words.`)
   lines.push('')
   lines.push('OUTPUT:')
   lines.push(`    - Write in: ${s.textLanguage}`)

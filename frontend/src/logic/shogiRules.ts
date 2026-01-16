@@ -351,20 +351,58 @@ function isSquareLegallyAttackable(
   return false
 }
 
-function hasLegalRecapture(
+type LegalAttacker = {
+  fromIndex: number
+  piece: IShogiPiece
+}
+
+function findLegalAttackers(
   targetIndex: number,
-  owner: PlayerOwner,
+  attackerOwner: PlayerOwner,
+  cells: (IShogiPiece | null)[],
+): LegalAttacker[] {
+  const attackers: LegalAttacker[] = []
+  for (let i = 0; i < BOARD_CELLS; i++) {
+    const p = cells[i]
+    if (!p || p.owner !== attackerOwner) continue
+    const moves = calculateLegalMovesOnBoard(p, i, cells)
+    if (moves.includes(targetIndex)) attackers.push({ fromIndex: i, piece: p })
+  }
+  return attackers
+}
+
+function simulateCapture(
+  cells: (IShogiPiece | null)[],
+  fromIndex: number,
+  toIndex: number,
+): (IShogiPiece | null)[] {
+  const next = cloneCells(cells)
+  const attacker = cells[fromIndex]
+  if (!attacker) return next
+  next[fromIndex] = null
+  next[toIndex] = attacker
+  return next
+}
+
+function hasLegalRecaptureAfterCapture(
+  targetIndex: number,
+  targetOwner: PlayerOwner,
   cells: (IShogiPiece | null)[],
 ): boolean {
-  const next = cloneCells(cells)
-  next[targetIndex] = null
-  for (let i = 0; i < BOARD_CELLS; i++) {
-    if (i === targetIndex) continue
-    const p = next[i]
-    if (!p || p.owner !== owner) continue
-    const moves = calculateLegalMovesOnBoard(p, i, next)
-    if (moves.includes(targetIndex)) return true
+  const attackers = findLegalAttackers(targetIndex, opponentOwner(targetOwner), cells)
+  if (attackers.length === 0) return false
+
+  for (const attacker of attackers) {
+    const next = simulateCapture(cells, attacker.fromIndex, targetIndex)
+    for (let i = 0; i < BOARD_CELLS; i++) {
+      if (i === targetIndex) continue
+      const p = next[i]
+      if (!p || p.owner !== targetOwner) continue
+      const moves = calculateLegalMovesOnBoard(p, i, next)
+      if (moves.includes(targetIndex)) return true
+    }
   }
+
   return false
 }
 
@@ -382,7 +420,7 @@ export function findHangingPieces(
     if (p.type === 'King') continue
 
     if (!isSquareLegallyAttackable(i, opponent, cells)) continue
-    if (hasLegalRecapture(i, targetOwner, cells)) continue
+    if (hasLegalRecaptureAfterCapture(i, targetOwner, cells)) continue
 
     const value = pieceValue(p)
     const code = pieceCode(p)
