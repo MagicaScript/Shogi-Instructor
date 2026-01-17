@@ -187,7 +187,7 @@ export default defineComponent({
   methods: {
     formatSideLabel(side: PlayerColor | null): string {
       if (!side) return ''
-      const who = this.playerColor ? (side === this.playerColor ? 'player' : 'opponent') : null
+      const who = this.playerColor ? (side === this.playerColor ? 'player' : 'you') : null
       const name = side === 'sente' ? 'Sente' : 'Gote'
       return who ? `${name} (${who})` : name
     },

@@ -83,8 +83,9 @@ function scoreToEvalContext(
   const abs = Math.abs(cp)
 
   let ctx = 'approximately equal'
-  if (abs < 300) ctx = 'slight edge'
-  else if (abs < 800) ctx = 'clear advantage'
+  if (abs < 50) ctx = 'approximately equal'
+  else if (abs < 200) ctx = 'slight edge'
+  else if (abs < 1000) ctx = 'clear advantage'
   else if (abs < 2000) ctx = 'large advantage'
   else ctx = 'decisive advantage'
 
