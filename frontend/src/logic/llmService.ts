@@ -4,7 +4,7 @@ import type { Score } from '@/schemes/usi'
 import { isObject } from '@/utils/typeGuards'
 import type { MoveQuality } from '@/schemes/moveHistory'
 import { moveQualityLabel } from '@/logic/moveQuality'
-import { toFullUsiMove } from '@/utils/sfenUtils'
+import { toFullUsiMove, toKIFMove } from '@/utils/sfenUtils'
 
 export type LLMEmotion = 'happy' | 'neutral' | 'concerned' | 'excited'
 
@@ -118,6 +118,14 @@ function randomIntInclusive(min: number, max: number): number {
   return lo + Math.floor(Math.random() * range)
 }
 
+function formatMoveWithKif(fullUsi?: string, kif?: string): string | null {
+  if (!fullUsi) return null
+  const trimmed = fullUsi.trim()
+  if (!trimmed) return null
+  const kifTrimmed = kif?.trim()
+  return kifTrimmed ? `${trimmed} ${kifTrimmed}` : trimmed
+}
+
 function buildPrompt(ctx: LLMCoachContext): string {
   const s = ctx.settings
   const e = ctx.engine
@@ -126,6 +134,8 @@ function buildPrompt(ctx: LLMCoachContext): string {
 
   const bestmoveFull = e.bestmove && sfen.length > 0 ? toFullUsiMove(e.bestmove, sfen) : e.bestmove
   const ponderFull = e.ponder && sfen.length > 0 ? toFullUsiMove(e.ponder, sfen) : e.ponder
+  const bestmoveKif = bestmoveFull ? toKIFMove(bestmoveFull) : undefined
+  const ponderKif = ponderFull ? toKIFMove(ponderFull) : undefined
 
   const scoreInfo = scoreToEvalContext(e.score)
   const targetWordCount = randomIntInclusive(5, 30)
@@ -156,7 +166,11 @@ function buildPrompt(ctx: LLMCoachContext): string {
   if (sfen.length > 0) lines.push(`    - sfen: "${sfen}"`)
   if (b?.playerColor) lines.push(`    - Player side: "${b.playerColor}"`)
   if (b?.sideLastMove) lines.push(`    - Side Last Move: "${b.sideLastMove}"`)
-  if (b?.lastMove) lines.push(`    - Last Move: ${b.lastMove}`)
+  if (b?.lastMove) {
+    const lastMoveKif = toKIFMove(b.lastMove)
+    const lastMoveText = formatMoveWithKif(b.lastMove, lastMoveKif)
+    if (lastMoveText) lines.push(`    - Last Move: ${lastMoveText}`)
+  }
 
   if (b?.lastMoveQuality && b.lastMoveQuality !== 'unknown') {
     const qualityLabel = moveQualityLabel(b.lastMoveQuality)
@@ -197,8 +211,10 @@ function buildPrompt(ctx: LLMCoachContext): string {
   }
 
   if (!isPlayerSideLastMove(b?.sideLastMove)) {
-    if (bestmoveFull) lines.push(`    - Best Move for side to move: ${bestmoveFull}`)
-    if (ponderFull) lines.push(`    - Ponder: ${ponderFull}`)
+    const bestmoveText = formatMoveWithKif(bestmoveFull, bestmoveKif)
+    if (bestmoveText) lines.push(`    - Best Move for side to move: ${bestmoveText}`)
+    const ponderText = formatMoveWithKif(ponderFull, ponderKif)
+    if (ponderText) lines.push(`    - Ponder: ${ponderText}`)
 
     if (e.pv && e.pv.length > 0) lines.push(`    - PV: ${e.pv.join(' ')}`)
   }

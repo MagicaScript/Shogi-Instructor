@@ -181,7 +181,7 @@ class Knight extends BaseShogiPiece {
     return 'Knight'
   }
   get label() {
-    return this.promoted ? '成桂' : '桂'
+    return this.promoted ? '圭' : '桂'
   }
   getValue() {
     return this.promoted ? 10 : 4

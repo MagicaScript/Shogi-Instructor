@@ -63,10 +63,166 @@ const PIECE_LABEL_MAP: Record<PieceType, string> = {
   Rook: '飛',
 }
 
+const KIF_PIECE_LABEL_MAP: Record<
+  PieceType,
+  {
+    base: string
+    promoted?: string
+  }
+> = {
+  Pawn: { base: '歩', promoted: 'と' },
+  Lance: { base: '香', promoted: '成香' },
+  Knight: { base: '桂', promoted: '成桂' },
+  Silver: { base: '銀', promoted: '成銀' },
+  Gold: { base: '金' },
+  King: { base: '玉' },
+  Bishop: { base: '角', promoted: '馬' },
+  Rook: { base: '飛', promoted: '龍' },
+}
+
+const SFEN_LETTER_TO_TYPE: Record<string, PieceType> = {
+  P: 'Pawn',
+  L: 'Lance',
+  N: 'Knight',
+  S: 'Silver',
+  G: 'Gold',
+  K: 'King',
+  B: 'Bishop',
+  R: 'Rook',
+}
+
+const KIF_FILE_DIGITS: Record<string, string> = {
+  '1': '１',
+  '2': '２',
+  '3': '３',
+  '4': '４',
+  '5': '５',
+  '6': '６',
+  '7': '７',
+  '8': '８',
+  '9': '９',
+}
+
+const KIF_RANK_KANJI: Record<string, string> = {
+  a: '一',
+  b: '二',
+  c: '三',
+  d: '四',
+  e: '五',
+  f: '六',
+  g: '七',
+  h: '八',
+  i: '九',
+}
+
 const BOARD_SIZE = 9
 const BOARD_CELLS = 81
 const USI_RANK_A_CODE = 'a'.charCodeAt(0)
 const USI_RANK_I_CODE = 'i'.charCodeAt(0)
+
+function usiSquareToIndex(square: string): number | null {
+  if (square.length < 2) return null
+  const fileChar = square[0]
+  const rankChar = square[1]
+  if (!fileChar || !rankChar) return null
+
+  const file = Number.parseInt(fileChar, 10)
+  if (!Number.isFinite(file) || file < 1 || file > 9) return null
+
+  const rankCode = rankChar.charCodeAt(0)
+  if (rankCode < USI_RANK_A_CODE || rankCode > USI_RANK_I_CODE) return null
+
+  const x = 9 - file
+  const y = rankCode - USI_RANK_A_CODE
+  return y * BOARD_SIZE + x
+}
+
+function usiRankCharToNumber(rankChar: string): number | null {
+  const rankCode = rankChar.charCodeAt(0)
+  if (rankCode < USI_RANK_A_CODE || rankCode > USI_RANK_I_CODE) return null
+  return rankCode - USI_RANK_A_CODE + 1
+}
+
+function usiSquareToKifDest(square: string): string | null {
+  if (square.length < 2) return null
+  const fileChar = square[0]
+  const rankChar = square[1]
+  if (!fileChar || !rankChar) return null
+
+  const file = KIF_FILE_DIGITS[fileChar]
+  const rank = KIF_RANK_KANJI[rankChar]
+  if (!file || !rank) return null
+  return `${file}${rank}`
+}
+
+function usiSquareToKifOrigin(square: string): string | null {
+  if (square.length < 2) return null
+  const fileChar = square[0]
+  const rankChar = square[1]
+  if (!fileChar || !rankChar) return null
+
+  const rankNumber = usiRankCharToNumber(rankChar)
+  if (!rankNumber) return null
+  return `(${fileChar}${rankNumber})`
+}
+
+type ParsedFullUsi = {
+  pieceType: PieceType
+  to: string
+  from?: string
+  isDrop: boolean
+  promoted: boolean
+}
+
+function parseFullUsiMove(fullUsi: string): ParsedFullUsi | null {
+  const trimmed = fullUsi.trim()
+  if (!trimmed) return null
+
+  let idx = 0
+  let promotedPrefix = false
+
+  if (trimmed[idx] === '+') {
+    promotedPrefix = true
+    idx += 1
+  }
+
+  const pieceChar = trimmed[idx]
+  if (!pieceChar) return null
+  const pieceType = SFEN_LETTER_TO_TYPE[pieceChar.toUpperCase()]
+  if (!pieceType) return null
+  idx += 1
+
+  if (trimmed[idx] === '*') {
+    const to = trimmed.slice(idx + 1, idx + 3)
+    if (to.length < 2) return null
+    return {
+      pieceType,
+      to,
+      isDrop: true,
+      promoted: promotedPrefix,
+    }
+  }
+
+  const from = trimmed.slice(idx, idx + 2)
+  if (from.length < 2) return null
+
+  const markerPos = idx + 2
+  const marker = trimmed[markerPos]
+  const toStart = marker === 'x' || marker === '-' ? markerPos + 1 : markerPos
+  const to = trimmed.slice(toStart, toStart + 2)
+  if (to.length < 2) return null
+
+  const suffix = trimmed.slice(toStart + 2)
+  const promotedSuffix = suffix.includes('+')
+
+  return {
+    pieceType,
+    from,
+    to,
+    isDrop: false,
+    promoted: promotedPrefix || promotedSuffix,
+  }
+}
 
 function isDigitChar(ch: string): boolean {
   const code = ch.charCodeAt(0)
@@ -326,12 +482,12 @@ function addOrUpdateKomadai(list: KomadaiItem[], item: KomadaiItem): void {
 
 /**
  * Converts a USI move into a full USI move prefixed with the moving piece letter,
- * using the given SFEN to locate the moving piece.
+ * inserting a capture (x) or move (-) marker between from/to, using the given SFEN.
  *
  * Examples:
- * - "7g7f" -> "P7g7f"
- * - "8h7g" -> "B8h7g"
- * - "P*5e" -> "P*5e" (already includes piece)
+ * - "7g7f" -> "P7g-7f"
+ * - "8h7g" -> "B8hx7g" (if capture) or "B8h-7g" (if not)
+ * - "P*5e" -> "P*5e" (drop moves stay unchanged)
  */
 export function toFullUsiMove(usi: string, sfen: string): string {
   const trimmed = usi.trim()
@@ -340,30 +496,49 @@ export function toFullUsiMove(usi: string, sfen: string): string {
   if (trimmed.length < 4) return trimmed
 
   const from = trimmed.slice(0, 2)
-  const fileChar = from[0]
-  const rankChar = from[1]
-  if (!fileChar || !rankChar) return trimmed
-
-  const file = Number.parseInt(fileChar, 10)
-  if (!Number.isFinite(file) || file < 1 || file > 9) return trimmed
-
-  const rankCode = rankChar.charCodeAt(0)
-  if (rankCode < USI_RANK_A_CODE || rankCode > USI_RANK_I_CODE) return trimmed
-
-  const x = 9 - file
-  const y = rankCode - USI_RANK_A_CODE
-  const index = y * BOARD_SIZE + x
+  const to = trimmed.slice(2, 4)
+  const suffix = trimmed.slice(4)
+  const fromIndex = usiSquareToIndex(from)
+  const toIndex = usiSquareToIndex(to)
+  if (fromIndex === null || toIndex === null) return trimmed
 
   try {
     const parsed = parseSFEN(sfen)
-    const piece = parsed.boardState.get(index)
+    const piece = parsed.boardState.get(fromIndex)
     if (!piece) return trimmed
 
     const pieceLetter = PIECE_TYPE_TO_SFEN[piece.type]
     if (!pieceLetter) return trimmed
 
-    return `${pieceLetter}${trimmed}`
+    const target = parsed.boardState.get(toIndex)
+    const marker = target && target.owner !== piece.owner ? 'x' : '-'
+    const prefix = piece.promoted ? `+${pieceLetter}` : pieceLetter
+    return `${prefix}${from}${marker}${to}${suffix}`
   } catch {
     return trimmed
   }
+}
+
+/**
+ * Converts a full USI move (from toFullUsiMove) into KIF move text.
+ * Returns empty string when parsing fails.
+ */
+export function toKIFMove(fullUsi: string, prevFullUsi?: string): string {
+  const parsed = parseFullUsiMove(fullUsi)
+  if (!parsed) return ''
+
+  const prevParsed = prevFullUsi ? parseFullUsiMove(prevFullUsi) : null
+  const sameSquare = Boolean(prevParsed && prevParsed.to === parsed.to)
+  const dest = sameSquare ? '同　' : usiSquareToKifDest(parsed.to)
+  if (!dest) return ''
+
+  const labelInfo = KIF_PIECE_LABEL_MAP[parsed.pieceType]
+  const pieceName = parsed.promoted && labelInfo.promoted ? labelInfo.promoted : labelInfo.base
+
+  if (parsed.isDrop) {
+    return `${dest}${pieceName}打`
+  }
+
+  const origin = parsed.from ? usiSquareToKifOrigin(parsed.from) : null
+  return origin ? `${dest}${pieceName}${origin}` : `${dest}${pieceName}`
 }
