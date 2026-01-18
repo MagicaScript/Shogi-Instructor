@@ -38,3 +38,9 @@ coverage
 
 # Vitest
 __screenshots__/
+
+dist_electron/
+
+backend/backend.spec
+backend/build/
+.venv/

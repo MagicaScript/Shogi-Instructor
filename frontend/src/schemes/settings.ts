@@ -1,5 +1,3 @@
-/* src/schemes/settings.ts */
-
 import {
   YANEURAOU_PARAM_DEFAULTS,
   applyYaneuraOuParamPatch,
@@ -39,7 +37,7 @@ const DEFAULT_COACHES: readonly CoachProfile[] = [
   {
     id: 'calm-sensei',
     name: 'Calm Sensei',
-    image: '/assets/calm-sensei.jpg',
+    image: './assets/calm-sensei.jpg',
     voice: 'neutral_male_1',
     language: 'English',
     personalityPrompt:
@@ -48,7 +46,7 @@ const DEFAULT_COACHES: readonly CoachProfile[] = [
   {
     id: 'tactical-trainer',
     name: 'Tactical Trainer',
-    image: '/assets/tactical-trainer.jpg',
+    image: './assets/tactical-trainer.jpg',
     voice: 'energetic_male_1',
     language: 'English',
     personalityPrompt:
@@ -57,7 +55,7 @@ const DEFAULT_COACHES: readonly CoachProfile[] = [
   {
     id: 'kind-mentor',
     name: 'Kind Mentor',
-    image: '/assets/kind-mentor.jpg',
+    image: './assets/kind-mentor.jpg',
     voice: 'soft_female_1',
     language: 'English',
     personalityPrompt:
@@ -66,7 +64,7 @@ const DEFAULT_COACHES: readonly CoachProfile[] = [
   {
     id: 'sora-chan',
     name: 'Sora chan',
-    image: '/assets/sora-chan.jpg',
+    image: './assets/sora-chan.jpg',
     voice: 'Zephyr',
     language: 'English',
     personalityPrompt:
@@ -75,7 +73,7 @@ const DEFAULT_COACHES: readonly CoachProfile[] = [
   {
     id: 'hinatsuru-ai',
     name: 'Hinatsuru Ai',
-    image: '/assets/hinatsuru-ai.jpg',
+    image: './assets/hinatsuru-ai.jpg',
     voice: 'soft_female_1',
     language: 'English',
     personalityPrompt: 'You are devoted, slightly clumsy, and love Shogi and your Master.',
@@ -119,11 +117,17 @@ function canUseDom(): boolean {
   return typeof window !== 'undefined' && typeof document !== 'undefined'
 }
 
+function isElectron(): boolean {
+  if (!canUseDom()) return false
+  const ua = navigator.userAgent.toLowerCase()
+  return ua.includes('electron')
+}
+
 function setCookie(name: string, value: string, days: number): void {
   if (!canUseDom()) return
   const maxAge = Math.max(0, Math.trunc(days * 24 * 60 * 60))
   const encoded = encodeURIComponent(value)
-  document.cookie = `${name}=${encoded}; Max-Age=${maxAge}; Path=/; SameSite=Lax; Secure`
+  document.cookie = `${name}=${encoded}; Max-Age=${maxAge}; Path=/; SameSite=Lax;`
 }
 
 function getCookie(name: string): string | null {
@@ -144,7 +148,7 @@ function getCookie(name: string): string | null {
 
 function deleteCookie(name: string): void {
   if (!canUseDom()) return
-  document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax; Secure`
+  document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax;`
 }
 
 function safeParseJson(raw: string): unknown {
@@ -200,13 +204,65 @@ function coerceSettingsState(raw: unknown): SettingsState {
 
 type Listener = (state: SettingsState) => void
 
+interface LLMApiKeyStore {
+  get(): string | null
+  set(apiKey: string): void
+  clear(): void
+}
+
+class CookieLLMApiKeyStore implements LLMApiKeyStore {
+  get(): string | null {
+    const v = getCookie(API_KEY_COOKIE)
+    if (!v) return null
+    const k = v.trim()
+    return k.length > 0 ? k : null
+  }
+
+  set(apiKey: string): void {
+    const key = clampString(apiKey, 512)
+    if (key.length === 0) return
+    setCookie(API_KEY_COOKIE, key, 365)
+  }
+
+  clear(): void {
+    deleteCookie(API_KEY_COOKIE)
+  }
+}
+
+class InMemoryLLMApiKeyStore implements LLMApiKeyStore {
+  private key: string | null = null
+
+  get(): string | null {
+    return this.key
+  }
+
+  set(apiKey: string): void {
+    const k = clampString(apiKey, 512)
+    if (k.length === 0) return
+    this.key = k
+  }
+
+  clear(): void {
+    this.key = null
+  }
+}
+
+function createLLMApiKeyStore(): LLMApiKeyStore {
+  if (isElectron()) {
+    return new InMemoryLLMApiKeyStore()
+  }
+  return new CookieLLMApiKeyStore()
+}
+
 export class SettingsStore {
   private static instance: SettingsStore | null = null
   private state: SettingsState
   private listeners: Set<Listener> = new Set()
+  private llmApiKeyStore: LLMApiKeyStore
 
   private constructor() {
     this.state = this.loadState()
+    this.llmApiKeyStore = createLLMApiKeyStore()
   }
 
   static getInstance(): SettingsStore {
@@ -253,20 +309,15 @@ export class SettingsStore {
   }
 
   setLLMApiKey(apiKey: string): void {
-    const key = clampString(apiKey, 512)
-    if (key.length === 0) return
-    setCookie(API_KEY_COOKIE, key, 365)
+    this.llmApiKeyStore.set(apiKey)
   }
 
   getLLMApiKey(): string | null {
-    const v = getCookie(API_KEY_COOKIE)
-    if (!v) return null
-    const k = v.trim()
-    return k.length > 0 ? k : null
+    return this.llmApiKeyStore.get()
   }
 
   clearLLMApiKey(): void {
-    deleteCookie(API_KEY_COOKIE)
+    this.llmApiKeyStore.clear()
   }
 
   private emit(): void {

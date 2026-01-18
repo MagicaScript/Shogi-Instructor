@@ -17,6 +17,7 @@ const crossOriginIsolationPlugin: Plugin = {
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: './',
   plugins: [
     vue(),
     vueDevTools(),

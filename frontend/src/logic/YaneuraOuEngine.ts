@@ -491,8 +491,8 @@ export class YaneuraOuEngine {
       )
     }
 
-    const scriptUrl = options.scriptUrl ?? '/lib/yaneuraou.material9.js'
-    const wasmUrl = options.wasmUrl ?? '/lib/yaneuraou.material9.wasm'
+    const scriptUrl = options.scriptUrl ?? './lib/yaneuraou.material9.js'
+    const wasmUrl = options.wasmUrl ?? './lib/yaneuraou.material9.wasm'
     const workerUrl = options.workerUrl ?? deriveWorkerUrl(scriptUrl)
 
     this.handshakeTimeoutMs = options.handshakeTimeoutMs ?? 15_000
