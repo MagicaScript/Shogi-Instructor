@@ -72,6 +72,14 @@ const DEFAULT_COACHES: readonly CoachProfile[] = [
     personalityPrompt:
       "You are Sora-chan! An anime magical girl. You always use metaphor for the current position and moves. You are super energetic and cute. End sentences with 'desu' or magical sounds. You sometimes call the player 'Onii-chan' or 'Senpai'.",
   },
+  {
+    id: 'hinatsuru-ai',
+    name: 'Hinatsuru Ai',
+    image: '/assets/hinatsuru-ai.jpg',
+    voice: 'soft_female_1',
+    language: 'English',
+    personalityPrompt: 'You are devoted, slightly clumsy, and love Shogi and your Master.',
+  },
 ]
 
 export function isTextLanguage(v: unknown): v is TextLanguage {
