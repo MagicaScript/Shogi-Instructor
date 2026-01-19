@@ -492,8 +492,11 @@ export class YaneuraOuEngine {
       )
     }
 
-    const scriptUrl = options.scriptUrl ?? '/lib/yaneuraou.material9.js'
-    const wasmUrl = options.wasmUrl ?? '/lib/yaneuraou.material9.wasm'
+    /* IMPORTANT: Must be relative path. WASM + Emscripten require relative path.
+    This module may be loaded from non-root paths, file://, or iframe.
+    DO NOT convert to absolute (/lib/...) path.*/
+    const scriptUrl = options.scriptUrl ?? './lib/yaneuraou.material9.js'
+    const wasmUrl = options.wasmUrl ?? './lib/yaneuraou.material9.wasm'
     const workerUrl = options.workerUrl ?? deriveWorkerUrl(scriptUrl)
 
     this.handshakeTimeoutMs = options.handshakeTimeoutMs ?? 15_000
