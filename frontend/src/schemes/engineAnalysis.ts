@@ -2,6 +2,22 @@ import type { Score } from './usi'
 import { isScore } from './usi'
 import { isObject } from '@/utils/typeGuards'
 
+export type AnalyzeStaticParams = {
+  depth: number
+  movetimeMs: number
+}
+
+export type AnalyzeDynamicParams = {
+  sfen: string
+}
+
+export type AnalyzeParams = AnalyzeStaticParams & AnalyzeDynamicParams
+
+export const ANALYZE_STATIC_DEFAULTS: AnalyzeStaticParams = {
+  depth: 30,
+  movetimeMs: 2000,
+}
+
 export type EngineAnalysisPayload = {
   sfen: string
   bestmove: string | null
@@ -14,6 +30,34 @@ export type EngineAnalysisPayload = {
 
 function isStringArray(v: unknown): v is string[] {
   return Array.isArray(v) && v.every((x) => typeof x === 'string')
+}
+
+function coerceNumber(raw: unknown, fallback: number, min: number): number {
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  if (!Number.isFinite(n)) return fallback
+  return Math.max(min, Math.trunc(n))
+}
+
+export function isAnalyzeStaticParams(v: unknown): v is AnalyzeStaticParams {
+  if (!isObject(v)) return false
+  const r = v as Record<string, unknown>
+  return (
+    typeof r.depth === 'number' &&
+    Number.isFinite(r.depth) &&
+    typeof r.movetimeMs === 'number' &&
+    Number.isFinite(r.movetimeMs)
+  )
+}
+
+export function coerceAnalyzeStaticParams(
+  raw: unknown,
+  defaults: AnalyzeStaticParams = ANALYZE_STATIC_DEFAULTS,
+): AnalyzeStaticParams {
+  if (!isObject(raw)) return { ...defaults }
+  const r = raw as Record<string, unknown>
+  const depth = coerceNumber(r.depth, defaults.depth, 1)
+  const movetimeMs = coerceNumber(r.movetimeMs, defaults.movetimeMs, 0)
+  return { depth, movetimeMs }
 }
 
 export function isEngineAnalysisPayload(v: unknown): v is EngineAnalysisPayload {

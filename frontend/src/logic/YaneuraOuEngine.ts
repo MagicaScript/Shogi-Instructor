@@ -1,6 +1,7 @@
 /* src/logic/yaneuraOuEngine.ts */
 
 import { settingsStore, type SettingsState } from '@/schemes/settings'
+import type { AnalyzeParams } from '@/schemes/engineAnalysis'
 import {
   YANEURAOU_OPTION_DEFS,
   YANEURAOU_PARAM_DEFAULTS,
@@ -34,11 +35,11 @@ export type AnalyzeResult = {
   isOnlyMove: boolean
 }
 
-export type AnalyzeParams = {
-  sfen: string
-  depth?: number
-  movetimeMs?: number
-}
+export type {
+  AnalyzeDynamicParams,
+  AnalyzeParams,
+  AnalyzeStaticParams,
+} from '@/schemes/engineAnalysis'
 
 export type InitOptions = {
   scriptUrl?: string
@@ -491,8 +492,8 @@ export class YaneuraOuEngine {
       )
     }
 
-    const scriptUrl = options.scriptUrl ?? './lib/yaneuraou.material9.js'
-    const wasmUrl = options.wasmUrl ?? './lib/yaneuraou.material9.wasm'
+    const scriptUrl = options.scriptUrl ?? '/lib/yaneuraou.material9.js'
+    const wasmUrl = options.wasmUrl ?? '/lib/yaneuraou.material9.wasm'
     const workerUrl = options.workerUrl ?? deriveWorkerUrl(scriptUrl)
 
     this.handshakeTimeoutMs = options.handshakeTimeoutMs ?? 15_000
@@ -659,8 +660,12 @@ export class YaneuraOuEngine {
     try {
       this.post(`position sfen ${sfen}`)
 
-      if (typeof params.movetimeMs === 'number' && Number.isFinite(params.movetimeMs)) {
-        this.post(`go movetime ${Math.max(0, Math.floor(params.movetimeMs))}`)
+      if (
+        typeof params.movetimeMs === 'number' &&
+        Number.isFinite(params.movetimeMs) &&
+        params.movetimeMs > 0
+      ) {
+        this.post(`go movetime ${Math.max(1, Math.floor(params.movetimeMs))}`)
       } else {
         const depth = params.depth ?? 18
         this.post(`go depth ${Math.max(1, Math.floor(depth))}`)

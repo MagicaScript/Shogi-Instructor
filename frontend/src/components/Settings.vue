@@ -10,6 +10,7 @@ import {
   type SettingsState,
   type TextLanguage,
 } from '@/schemes/settings'
+import { ANALYZE_STATIC_DEFAULTS } from '@/schemes/engineAnalysis'
 import {
   YANEURAOU_OPTION_DEFS,
   type YaneuraOuOptionDef,
@@ -135,7 +136,23 @@ export default defineComponent({
 
     resetEngineDefaults() {
       settingsStore.updateYaneuraOu({})
-      this.flash('Engine params normalized.')
+      settingsStore.updateYaneuraOuAnalyze({ ...ANALYZE_STATIC_DEFAULTS })
+      settingsStore.requestEngineReset()
+      this.flash('Engine params reset and engine restarted.')
+    },
+
+    onEngineAnalyzeDepth(raw: string) {
+      const n = Number(raw)
+      if (!Number.isFinite(n)) return
+      settingsStore.updateYaneuraOuAnalyze({ depth: Math.max(1, Math.trunc(n)) })
+      this.flash('Saved.')
+    },
+
+    onEngineAnalyzeMovetime(raw: string) {
+      const n = Number(raw)
+      if (!Number.isFinite(n)) return
+      settingsStore.updateYaneuraOuAnalyze({ movetimeMs: Math.max(0, Math.trunc(n)) })
+      this.flash('Saved.')
     },
 
     onEngineCheck(name: keyof YaneuraOuParam, checked: boolean) {
@@ -350,6 +367,27 @@ export default defineComponent({
       <div v-show="engineOpen" class="section-body">
         <div class="engine-actions">
           <button class="btn" type="button" @click="resetEngineDefaults">Reset Engine</button>
+        </div>
+
+        <div class="field">
+          <label>Analyze depth</label>
+          <input
+            class="input mono"
+            type="number"
+            min="1"
+            :value="state.yaneuraOuAnalyze.depth"
+            @change="onEngineAnalyzeDepth(($event.target as HTMLInputElement).value)"
+          />
+        </div>
+        <div class="field">
+          <label>Analyze movetime (ms)</label>
+          <input
+            class="input mono"
+            type="number"
+            min="0"
+            :value="state.yaneuraOuAnalyze.movetimeMs"
+            @change="onEngineAnalyzeMovetime(($event.target as HTMLInputElement).value)"
+          />
         </div>
 
         <div v-for="def in yaneuraOuOptionDefs" :key="def.name" class="field">

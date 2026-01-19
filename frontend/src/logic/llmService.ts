@@ -308,7 +308,7 @@ function buildPromptHinatsuruAi(ctx: LLMCoachContext): string {
     lines.push(`    - Character Personality: "${ctx.coach.personalityPrompt.trim()}"`)
   } else {
     lines.push(
-      '    - Character Personality: "You are devoted, slightly clumsy, and love Shogi and your Master."',
+      '    - Character Personality: "You are devoted, clever, though sometimes a bit clumsy, and love Shogi and your Master."',
     )
   }
 
@@ -399,12 +399,12 @@ function buildPromptHinatsuruAi(ctx: LLMCoachContext): string {
           break
         case 'mistake':
           lines.push(
-            '    - The last move was a mistake. You are thinking hard. (e.g., "…こう、こう、こうこうこう……んっ!! ").',
+            '    - The last move was a mistake. You are thinking very hard. React with "…こう、こう、こうこうこう……んっ!!".',
           )
           break
         case 'blunder':
           lines.push(
-            '    - The last move was a serious blunder. React with worry or panic (e.g., "あっ!や、やっぱりだめぇ!! ").',
+            '    - The last move was a serious blunder. React with worry or panic (e.g., "あっ!や、やっぱりだめぇ!!").',
           )
           break
         case 'forced':

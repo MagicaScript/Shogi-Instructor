@@ -5,6 +5,12 @@ import {
   isYaneuraOuParam,
   type YaneuraOuParam,
 } from '@/schemes/yaneuraOuParam'
+import {
+  ANALYZE_STATIC_DEFAULTS,
+  coerceAnalyzeStaticParams,
+  isAnalyzeStaticParams,
+  type AnalyzeStaticParams,
+} from '@/schemes/engineAnalysis'
 import { isObject } from '@/utils/typeGuards'
 
 export const TEXT_LANGUAGES = ['English', 'Japanese', 'Chinese'] as const
@@ -26,6 +32,7 @@ export type SettingsState = {
   audioLanguage: TextLanguage
   coachId: string
   yaneuraOu: YaneuraOuParam
+  yaneuraOuAnalyze: AnalyzeStaticParams
 }
 
 const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions'
@@ -76,7 +83,8 @@ const DEFAULT_COACHES: readonly CoachProfile[] = [
     image: './assets/hinatsuru-ai.jpg',
     voice: 'soft_female_1',
     language: 'English',
-    personalityPrompt: 'You are devoted, slightly clumsy, and love Shogi and your Master.',
+    personalityPrompt:
+      'You are devoted, clever, though sometimes a bit clumsy, and love Shogi and your Master.',
   },
 ]
 
@@ -109,7 +117,8 @@ export function isSettingsState(v: unknown): v is SettingsState {
     isTextLanguage(v.audioLanguage) &&
     typeof v.coachId === 'string' &&
     v.coachId.trim().length > 0 &&
-    isYaneuraOuParam(v.yaneuraOu)
+    isYaneuraOuParam(v.yaneuraOu) &&
+    isAnalyzeStaticParams(v.yaneuraOuAnalyze)
   )
 }
 
@@ -172,6 +181,7 @@ function makeDefaultState(): SettingsState {
     audioLanguage: 'English',
     coachId: DEFAULT_COACHES[0]?.id ?? 'calm-sensei',
     yaneuraOu: { ...YANEURAOU_PARAM_DEFAULTS },
+    yaneuraOuAnalyze: { ...ANALYZE_STATIC_DEFAULTS },
   }
 }
 
@@ -198,8 +208,17 @@ function coerceSettingsState(raw: unknown): SettingsState {
     typeof r.coachId === 'string' && r.coachId.trim().length > 0 ? r.coachId.trim() : base.coachId
 
   const yaneuraOu = coerceYaneuraOuParam(r.yaneuraOu, base.yaneuraOu)
+  const yaneuraOuAnalyze = coerceAnalyzeStaticParams(r.yaneuraOuAnalyze, base.yaneuraOuAnalyze)
 
-  return { llmBaseUrl, llmModelName, textLanguage, audioLanguage, coachId, yaneuraOu }
+  return {
+    llmBaseUrl,
+    llmModelName,
+    textLanguage,
+    audioLanguage,
+    coachId,
+    yaneuraOu,
+    yaneuraOuAnalyze,
+  }
 }
 
 type Listener = (state: SettingsState) => void
@@ -258,6 +277,7 @@ export class SettingsStore {
   private static instance: SettingsStore | null = null
   private state: SettingsState
   private listeners: Set<Listener> = new Set()
+  private engineResetListeners: Set<() => void> = new Set()
   private llmApiKeyStore: LLMApiKeyStore
 
   private constructor() {
@@ -280,7 +300,11 @@ export class SettingsStore {
   }
 
   getState(): SettingsState {
-    return { ...this.state, yaneuraOu: { ...this.state.yaneuraOu } }
+    return {
+      ...this.state,
+      yaneuraOu: { ...this.state.yaneuraOu },
+      yaneuraOuAnalyze: { ...this.state.yaneuraOuAnalyze },
+    }
   }
 
   subscribe(listener: Listener): () => void {
@@ -291,11 +315,21 @@ export class SettingsStore {
     }
   }
 
+  onEngineReset(listener: () => void): () => void {
+    this.engineResetListeners.add(listener)
+    return () => {
+      this.engineResetListeners.delete(listener)
+    }
+  }
+
   update(patch: Partial<SettingsState>): void {
     const next: SettingsState = {
       ...this.state,
       ...patch,
       yaneuraOu: patch.yaneuraOu ? { ...patch.yaneuraOu } : this.state.yaneuraOu,
+      yaneuraOuAnalyze: patch.yaneuraOuAnalyze
+        ? { ...patch.yaneuraOuAnalyze }
+        : this.state.yaneuraOuAnalyze,
     }
     if (!isSettingsState(next)) return
     this.state = next
@@ -306,6 +340,18 @@ export class SettingsStore {
   updateYaneuraOu(patch: Partial<YaneuraOuParam>): void {
     const next = applyYaneuraOuParamPatch(this.state.yaneuraOu, patch)
     this.update({ yaneuraOu: next })
+  }
+
+  updateYaneuraOuAnalyze(patch: Partial<AnalyzeStaticParams>): void {
+    const next = coerceAnalyzeStaticParams(
+      { ...this.state.yaneuraOuAnalyze, ...patch },
+      this.state.yaneuraOuAnalyze,
+    )
+    this.update({ yaneuraOuAnalyze: next })
+  }
+
+  requestEngineReset(): void {
+    for (const fn of this.engineResetListeners) fn()
   }
 
   setLLMApiKey(apiKey: string): void {

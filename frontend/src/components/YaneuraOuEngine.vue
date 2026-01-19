@@ -1,21 +1,25 @@
 <script lang="ts">
 import { defineComponent } from 'vue'
 import { YaneuraOuEngineQueue } from '@/logic/yaneuraOuEngineQueue'
-import type { AnalyzeResult, UsiInfo } from '@/logic/yaneuraOuEngine'
+import type { AnalyzeResult, AnalyzeStaticParams, UsiInfo } from '@/logic/yaneuraOuEngine'
 import type { EngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import { isEngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import { normalizeScore } from '@/schemes/usi'
+import { settingsStore } from '@/schemes/settings'
 
 type EngineStatus = 'idle' | 'loading' | 'ready' | 'analyzing' | 'error'
 
 type Data = {
   engine: YaneuraOuEngineQueue
+  analysisDefaults: AnalyzeStaticParams
   status: EngineStatus
   errorMsg: string
   result: AnalyzeResult | null
   lastInfo: UsiInfo | null
   logLines: string[]
   cancelLogListener: (() => void) | null
+  cancelSettingsSub: (() => void) | null
+  cancelEngineReset: (() => void) | null
   lastSfenAnalyzed: string
   lastSfenQueued: string
   cancelInfoTap: (() => void) | null
@@ -27,8 +31,6 @@ export default defineComponent({
 
   props: {
     sfen: { type: String, required: true },
-    depth: { type: Number, default: 18 },
-    movetimeMs: { type: Number, default: undefined },
   },
 
   emits: {
@@ -38,12 +40,15 @@ export default defineComponent({
   data(): Data {
     return {
       engine: new YaneuraOuEngineQueue(),
+      analysisDefaults: { ...settingsStore.getState().yaneuraOuAnalyze },
       status: 'idle',
       errorMsg: '',
       result: null,
       lastInfo: null,
       logLines: [],
       cancelLogListener: null,
+      cancelSettingsSub: null,
+      cancelEngineReset: null,
       lastSfenAnalyzed: '',
       lastSfenQueued: '',
       cancelInfoTap: null,
@@ -77,9 +82,23 @@ export default defineComponent({
 
   mounted() {
     void this.initEngine()
+    this.cancelSettingsSub?.()
+    this.cancelSettingsSub = settingsStore.subscribe((s) => {
+      this.analysisDefaults = { ...s.yaneuraOuAnalyze }
+    })
+    this.cancelEngineReset?.()
+    this.cancelEngineReset = settingsStore.onEngineReset(() => {
+      void this.resetEngineRuntime()
+    })
   },
 
   beforeUnmount() {
+    this.cancelEngineReset?.()
+    this.cancelEngineReset = null
+
+    this.cancelSettingsSub?.()
+    this.cancelSettingsSub = null
+
     this.cancelInfoTap?.()
     this.cancelInfoTap = null
 
@@ -118,6 +137,16 @@ export default defineComponent({
       }
     },
 
+    async resetEngineRuntime() {
+      try {
+        await this.engine.dispose()
+      } catch {
+        // ignore
+      }
+      this.engine = new YaneuraOuEngineQueue()
+      await this.initEngine()
+    },
+
     async runAnalysis(sfen: string) {
       const trimmed = sfen.trim()
       if (trimmed.length === 0) return
@@ -139,11 +168,13 @@ export default defineComponent({
         this.lastInfo = rawInfo
       })
 
+      const { depth, movetimeMs } = this.analysisDefaults
+
       try {
         const r = await this.engine.enqueueAnalysis({
           sfen: trimmed,
-          depth: this.depth,
-          movetimeMs: this.movetimeMs,
+          depth,
+          movetimeMs,
         })
 
         this.result = r

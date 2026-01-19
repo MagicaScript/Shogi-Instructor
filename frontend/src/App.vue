@@ -135,11 +135,7 @@ function closeSettings() {
           </svg>
         </button>
         <div v-show="engineOpen" class="panel-body">
-          <YaneuraOuEngine
-            :sfen="currentSfen"
-            :depth="14"
-            @analysis-update="handleEngineAnalysisUpdate"
-          />
+          <YaneuraOuEngine :sfen="currentSfen" @analysis-update="handleEngineAnalysisUpdate" />
         </div>
       </section>
     </main>
