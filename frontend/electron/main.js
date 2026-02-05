@@ -24,8 +24,11 @@ let mainWindow;
 let backendProcess;
 
 function getBackendPath() {
- if (app.isPackaged) return path.join(process.resourcesPath, 'backend.exe');
- return path.join(__dirname, '../../backend/dist/backend.exe');
+ const executableName = process.platform === 'win32' ? 'backend.exe' : 'backend';
+ if (app.isPackaged) {
+    return path.join(process.resourcesPath, executableName);
+ }
+ return path.join(__dirname, '../../backend/dist', executableName);
 }
 
 function startBackend() {

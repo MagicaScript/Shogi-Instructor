@@ -1,0 +1,71 @@
+name: Build and Release Shogi Instructor
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  release:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+
+    env:
+      PYTHONIOENCODING: utf-8 
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js 20.19.0
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.19.0'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+        cache: 'pip'
+
+    - name: Install Frontend Dependencies
+      shell: bash
+      run: |
+        cd frontend
+        npm install
+
+    - name: Install Backend Dependencies
+      run: |
+        pip install -r ./requirements.txt
+
+    - name: Build Application
+      run: |
+        python cli.py --build-all
+
+    - name: Upload Artifacts (CI)
+      if: github.event_name != 'release'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Shogi-Instructor-${{ matrix.os }}
+        path: |
+          frontend/dist_electron/*.exe
+          frontend/dist_electron/*.AppImage
+
+    - name: Upload Release Assets
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          frontend/dist_electron/*.exe
+          frontend/dist_electron/*.AppImage
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
