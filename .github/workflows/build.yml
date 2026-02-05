@@ -1,82 +1,76 @@
-name: Build
+name: Build and Release
 
 on:
   push:
+    branches: [ "main", "master" ]
   release:
     types: [created]
   workflow_dispatch:
 
-permissions:
-  contents: write
+env:
+  PYTHONIOENCODING: utf-8
 
 jobs:
   build:
+    name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
-    env:
-      NODE_VERSION: 20.19.0
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+    - name: Setup Node.js 20.19.0
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.19.0'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
 
-      - name: Build (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          choco install nvm -y
-          Import-Module "$env:ChocolateyInstall\helpers\chocolateyProfile.psm1"
-          refreshenv
-          nvm install $env:NODE_VERSION
-          nvm use $env:NODE_VERSION
-          node -v
-          npm -v
-          Set-Location frontend
-          npm install
-          Set-Location ..
-          python -m pip install -r ./requirements.txt
-          python cli.py --build-all
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.14'
+        cache: 'pip'
 
-      - name: Build (Linux)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          set -euo pipefail
-          export NVM_DIR="$HOME/.nvm"
-          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-          . "$NVM_DIR/nvm.sh"
-          nvm install "$NODE_VERSION"
-          nvm use "$NODE_VERSION"
-          node -v
-          npm -v
-          cd frontend
-          npm install
-          cd ..
-          python -m pip install -r ./requirements.txt
-          python cli.py --build-all
+    - name: Install Frontend Dependencies
+      working-directory: frontend
+      run: npm install
 
-      - name: Upload build artifacts
-        if: github.event_name != 'release'
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist-${{ matrix.os }}
-          path: |
-            frontend/dist_electron/**/Shogi Instructor-*.exe
-            frontend/dist_electron/**/Shogi Instructor-*.AppImage
+    - name: Install Root Dependencies
+      run: pip install -r ./requirements.txt
 
-      - name: Upload release assets
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            frontend/dist_electron/**/Shogi Instructor-*.exe
-            frontend/dist_electron/**/Shogi Instructor-*.AppImage
-          fail_on_unmatched_files: false
+    - name: Build Backend
+      run: python cli.py --build-backend
+
+    - name: Rename Backend Binary (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: mv backend/dist/backend backend/dist/backend.exe
+
+    - name: Build Frontend
+      run: python cli.py --build-frontend
+
+    - name: Upload Artifacts (Windows)
+      if: matrix.os == 'windows-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Shogi-Instructor-Windows
+        path: frontend/dist_electron/*.exe
+
+    - name: Upload Artifacts (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Shogi-Instructor-Linux
+        path: frontend/dist_electron/*.AppImage
+
+    - name: Upload to Release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          frontend/dist_electron/*.exe
+          frontend/dist_electron/*.AppImage
