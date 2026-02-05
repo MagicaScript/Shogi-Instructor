@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 import subprocess
 import questionary
 from rich.console import Console
@@ -13,15 +13,16 @@ app = typer.Typer()
 console = Console()
 
 # Get project root directory (where this script is located)
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-BACKEND_DIR = os.path.join(PROJECT_ROOT, "backend")
-FRONTEND_DIR = os.path.join(PROJECT_ROOT, "frontend")
+PROJECT_ROOT = Path(__file__).resolve().parent
+BACKEND_DIR = PROJECT_ROOT / "backend"
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
 # Determine venv paths based on operating system
 IS_WINDOWS = platform.system() == "Windows"
-VENV_DIR = os.path.join(BACKEND_DIR, ".venv")
-VENV_PYTHON = os.path.join(VENV_DIR, "Scripts", "python.exe") if IS_WINDOWS else os.path.join(VENV_DIR, "bin", "python")
-VENV_PIP = os.path.join(VENV_DIR, "Scripts", "pip.exe") if IS_WINDOWS else os.path.join(VENV_DIR, "bin", "pip")
+VENV_DIR = BACKEND_DIR / ".venv"
+VENV_PYTHON = VENV_DIR / "Scripts" / "python.exe" if IS_WINDOWS else VENV_DIR / "bin" / "python"
+VENV_PIP = VENV_DIR / "Scripts" / "pip.exe" if IS_WINDOWS else VENV_DIR / "bin" / "pip"
+NON_INTERACTIVE = False
 
 # All available tasks with descriptions
 TASKS = [
@@ -60,7 +61,7 @@ TASKS = [
 ]
 
 
-def run_command(command: list, cwd: str = None, shell: bool = False):
+def run_command(command: list[str] | str, cwd: Path | str | None = None, shell: bool = False):
    """
    Execute a shell command and handle errors gracefully.
    
@@ -72,17 +73,21 @@ def run_command(command: list, cwd: str = None, shell: bool = False):
    Returns:
        bool: True if command succeeded, False otherwise
    """
-   cmd_str = ' '.join(command) if isinstance(command, list) else command
-   console.print(Panel.fit(f"[cyan]Running: {cmd_str}[/cyan]\n[dim]Directory: {cwd or os.getcwd()}[/dim]"))
+   command_to_run = [str(part) for part in command] if isinstance(command, list) else str(command)
+   cmd_str = " ".join(command_to_run) if isinstance(command_to_run, list) else command_to_run
+   cwd_path = Path(cwd) if cwd else None
+   cwd_display = str(cwd_path) if cwd_path else str(Path.cwd())
+   console.print(Panel.fit(f"[cyan]Running: {cmd_str}[/cyan]\n[dim]Directory: {cwd_display}[/dim]"))
    try:
-       subprocess.run(command, check=True, cwd=cwd, shell=shell)
+       subprocess.run(command_to_run, check=True, cwd=cwd_path, shell=shell)
        console.print(f"[green]✓ Command completed successfully.[/green]\n")
        return True
    except subprocess.CalledProcessError as e:
        console.print(f"[red]✗ Command failed with exit code {e.returncode}.[/red]\n")
        return False
    except FileNotFoundError:
-       console.print(f"[red]✗ Command not found: {command[0]}[/red]\n")
+       missing = command_to_run[0] if isinstance(command_to_run, list) else command_to_run
+       console.print(f"[red]✗ Command not found: {missing}[/red]\n")
        return False
 
 
@@ -90,14 +95,18 @@ def create_venv():
    """
    Create a Python virtual environment in the backend directory.
    If the venv already exists, prompt the user to recreate it.
+   In non-interactive mode, the existing venv is reused.
    
    Returns:
        bool: True if venv was created or already exists, False on failure
    """
    console.print(Panel.fit("[bold cyan]Creating Python Virtual Environment[/bold cyan]"))
    
-   if os.path.exists(VENV_DIR):
+   if VENV_DIR.exists():
        console.print(f"[yellow]Virtual environment already exists at {VENV_DIR}[/yellow]")
+       if NON_INTERACTIVE:
+           console.print("[green]Using existing virtual environment.[/green]")
+           return True
        overwrite = questionary.confirm("Do you want to recreate it?").ask()
        if overwrite:
            shutil.rmtree(VENV_DIR)
@@ -118,13 +127,13 @@ def install_backend_deps():
    console.print(Panel.fit("[bold cyan]Installing Backend Dependencies[/bold cyan]"))
    
    # Check if venv exists
-   if not os.path.exists(VENV_PYTHON):
+   if not VENV_PYTHON.exists():
        console.print("[red]Virtual environment not found. Please create it first.[/red]")
        return False
    
    # Check if requirements.txt exists
-   requirements_path = os.path.join(BACKEND_DIR, "requirements.txt")
-   if not os.path.exists(requirements_path):
+   requirements_path = BACKEND_DIR / "requirements.txt"
+   if not requirements_path.exists():
        console.print(f"[red]requirements.txt not found at {requirements_path}[/red]")
        return False
    
@@ -142,7 +151,7 @@ def package_backend():
    console.print(Panel.fit("[bold cyan]Packaging Backend with PyInstaller[/bold cyan]"))
    
    # Verify venv exists
-   if not os.path.exists(VENV_PYTHON):
+   if not VENV_PYTHON.exists():
        console.print("[red]Virtual environment not found. Please create it first.[/red]")
        return False
    
@@ -176,13 +185,13 @@ def build_frontend():
    console.print(Panel.fit("[bold cyan]Building Frontend Electron App[/bold cyan]"))
    
    # Verify frontend directory exists
-   if not os.path.exists(FRONTEND_DIR):
+   if not FRONTEND_DIR.exists():
        console.print(f"[red]Frontend directory not found at {FRONTEND_DIR}[/red]")
        return False
    
    # Install npm dependencies if node_modules doesn't exist
-   node_modules = os.path.join(FRONTEND_DIR, "node_modules")
-   if not os.path.exists(node_modules):
+   node_modules = FRONTEND_DIR / "node_modules"
+   if not node_modules.exists():
        console.print("[yellow]node_modules not found. Installing dependencies first...[/yellow]")
        npm_cmd = "npm.cmd" if IS_WINDOWS else "npm"
        if not run_command([npm_cmd, "install"], cwd=FRONTEND_DIR):
@@ -248,7 +257,7 @@ def dev_backend():
    console.print(Panel.fit("[bold cyan]Starting Backend Development Server[/bold cyan]"))
    
    # Set up venv if it doesn't exist
-   if not os.path.exists(VENV_PYTHON):
+   if not VENV_PYTHON.exists():
        console.print("[yellow]Virtual environment not found. Creating...[/yellow]")
        if not create_venv():
            return False
@@ -270,13 +279,13 @@ def dev_frontend():
    console.print(Panel.fit("[bold cyan]Starting Frontend Development Server[/bold cyan]"))
    
    # Verify frontend directory exists
-   if not os.path.exists(FRONTEND_DIR):
+   if not FRONTEND_DIR.exists():
        console.print(f"[red]Frontend directory not found at {FRONTEND_DIR}[/red]")
        return False
    
    # Install npm dependencies if needed
-   node_modules = os.path.join(FRONTEND_DIR, "node_modules")
-   if not os.path.exists(node_modules):
+   node_modules = FRONTEND_DIR / "node_modules"
+   if not node_modules.exists():
        console.print("[yellow]node_modules not found. Installing dependencies first...[/yellow]")
        npm_cmd = "npm.cmd" if IS_WINDOWS else "npm"
        if not run_command([npm_cmd, "install"], cwd=FRONTEND_DIR):
@@ -298,7 +307,7 @@ def dev_concurrent():
    console.print(Panel.fit("[bold magenta]Starting Development Servers (Concurrent)[/bold magenta]"))
    
    # Prepare backend environment if needed
-   if not os.path.exists(VENV_PYTHON):
+   if not VENV_PYTHON.exists():
        console.print("[yellow]Virtual environment not found. Creating...[/yellow]")
        if not create_venv():
            return False
@@ -306,8 +315,8 @@ def dev_concurrent():
            return False
    
    # Prepare frontend environment if needed
-   node_modules = os.path.join(FRONTEND_DIR, "node_modules")
-   if not os.path.exists(node_modules):
+   node_modules = FRONTEND_DIR / "node_modules"
+   if not node_modules.exists():
        console.print("[yellow]node_modules not found. Installing dependencies first...[/yellow]")
        npm_cmd = "npm.cmd" if IS_WINDOWS else "npm"
        if not run_command([npm_cmd, "install"], cwd=FRONTEND_DIR):
@@ -374,23 +383,23 @@ def clean_all():
    
    # List of paths to clean with descriptions
    paths_to_clean = [
-       (os.path.join(BACKEND_DIR, ".venv"), "Backend venv"),
-       (os.path.join(BACKEND_DIR, "dist"), "Backend dist"),
-       (os.path.join(BACKEND_DIR, "build"), "Backend build"),
-       (os.path.join(BACKEND_DIR, "backend.spec"), "Backend spec file"),
-       (os.path.join(FRONTEND_DIR, "dist"), "Frontend dist"),
-       (os.path.join(FRONTEND_DIR, "dist_electron"), "Frontend electron dist"),
-       (os.path.join(FRONTEND_DIR, "node_modules"), "Frontend node_modules"),
+       (BACKEND_DIR / ".venv", "Backend venv"),
+       (BACKEND_DIR / "dist", "Backend dist"),
+       (BACKEND_DIR / "build", "Backend build"),
+       (BACKEND_DIR / "backend.spec", "Backend spec file"),
+       (FRONTEND_DIR / "dist", "Frontend dist"),
+       (FRONTEND_DIR / "dist_electron", "Frontend electron dist"),
+       (FRONTEND_DIR / "node_modules", "Frontend node_modules"),
    ]
    
    # Remove each path if it exists
    for path, desc in paths_to_clean:
-       if os.path.exists(path):
+       if path.exists():
            try:
-               if os.path.isdir(path):
+               if path.is_dir():
                    shutil.rmtree(path)
                else:
-                   os.remove(path)
+                   path.unlink()
                console.print(f"[green]✓ Removed: {desc}[/green]")
            except Exception as e:
                console.print(f"[red]✗ Failed to remove {desc}: {e}[/red]")
@@ -458,6 +467,42 @@ def main_menu():
            execute_task(selected)
        else:
            console.print("[yellow]Cancelled. Returning to menu.[/yellow]")
+
+
+@app.callback(invoke_without_command=True)
+def main(
+   ctx: typer.Context,
+   build_all: bool = typer.Option(False, "--build-all", help="Run full build without prompts."),
+   build_backend: bool = typer.Option(False, "--build-backend", help="Run backend build without prompts."),
+   build_frontend: bool = typer.Option(False, "--build-frontend", help="Run frontend build without prompts."),
+   dev: bool = typer.Option(False, "--dev", help="Run dev servers without prompts."),
+   dev_backend: bool = typer.Option(False, "--dev-backend", help="Run backend dev server without prompts."),
+   dev_frontend: bool = typer.Option(False, "--dev-frontend", help="Run frontend dev server without prompts."),
+   clean: bool = typer.Option(False, "--clean", help="Clean build artifacts without prompts.")
+):
+   """Run a task via flags or start the interactive menu."""
+   task_flags = {
+       "build-all": build_all,
+       "build-backend": build_backend,
+       "build-frontend": build_frontend,
+       "dev": dev,
+       "dev-backend": dev_backend,
+       "dev-frontend": dev_frontend,
+       "clean": clean,
+   }
+   selected = [name for name, enabled in task_flags.items() if enabled]
+
+   if selected:
+       if len(selected) > 1:
+           console.print("[red]Please pass only one task flag at a time.[/red]")
+           raise typer.Exit(code=1)
+       global NON_INTERACTIVE
+       NON_INTERACTIVE = True
+       execute_task(selected[0])
+       raise typer.Exit()
+
+   if ctx.invoked_subcommand is None:
+       interactive()
 
 
 @app.command()
