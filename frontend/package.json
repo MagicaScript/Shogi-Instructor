@@ -34,21 +34,34 @@
       "dist/**/*",
       "electron/**/*"
     ],
-    "extraResources": [
-      {
-        "from": "../backend/dist/backend.exe",
-        "to": "backend.exe"
-      }
-    ],
     "win": {
       "target": [
         "nsis"
       ],
-      "icon": "public/icon.ico"
+      "icon": "public/icon.ico",
+      "extraResources": [
+        {
+          "from": "../backend/dist/backend.exe",
+          "to": "backend.exe"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "public/icon.png", 
+      "category": "Education",
+      "extraResources": [
+        {
+          "from": "../backend/dist/backend",
+          "to": "backend"
+        }
+      ]
     }
   },
   "devDependencies": {
@@ -71,3 +84,4 @@
     "vue-tsc": "^3.2.2"
   }
 }
+

@@ -1,4 +1,4 @@
-import { YaneuraOuEngine, type AnalyzeParams, type AnalyzeResult } from '@/logic/yaneuraOuEngine'
+import { YaneuraOuEngine, type AnalyzeParams, type AnalyzeResult } from '@/logic/YaneuraOuEngine'
 
 type LineListener = (line: string) => void
 
