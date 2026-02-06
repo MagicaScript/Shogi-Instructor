@@ -46,10 +46,6 @@ jobs:
     - name: Build Backend
       run: python cli.py --build-backend
 
-    - name: Rename Backend Binary (Linux)
-      if: matrix.os == 'ubuntu-latest'
-      run: mv backend/dist/backend backend/dist/backend.exe
-
     - name: Build Frontend
       run: python cli.py --build-frontend
 
