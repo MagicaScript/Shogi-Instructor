@@ -1,6 +1,6 @@
 {
   "name": "shogi-instructor",
-  "version": "1.0.2",
+  "version": "0.1.0",
   "description": "Shogi Instructor App",
   "author": "MagicaScript",
   "main": "electron/main.js",
@@ -54,7 +54,6 @@
       "target": [
         "AppImage"
       ],
-      "icon": "public/icon.ico",
       "category": "Game",
       "extraResources": [
         {
