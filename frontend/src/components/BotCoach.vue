@@ -40,6 +40,8 @@ type HistoryCell =
 
 type LLMState = 'idle' | 'loading' | 'success' | 'error'
 
+type RetryInfo = { httpStatus: number; attempt: number; maxAttempts: number } | null
+
 type Data = {
   coach: BotCoach
   loadError: string
@@ -74,6 +76,12 @@ type Data = {
   playerLastMoveEvalDrop: number | null
   /** Eval drop for the opponent's last move. */
   opponentLastMoveEvalDrop: number | null
+  playerRetryInfo: RetryInfo
+  opponentRetryInfo: RetryInfo
+  playerRetryExhausted: boolean
+  opponentRetryExhausted: boolean
+  playerRetrySignal: number
+  opponentRetrySignal: number
 }
 
 export default defineComponent({
@@ -116,6 +124,12 @@ export default defineComponent({
       opponentLastMove: '',
       playerLastMoveEvalDrop: null,
       opponentLastMoveEvalDrop: null,
+      playerRetryInfo: null,
+      opponentRetryInfo: null,
+      playerRetryExhausted: false,
+      opponentRetryExhausted: false,
+      playerRetrySignal: 0,
+      opponentRetrySignal: 0,
     }
   },
 
@@ -516,8 +530,11 @@ export default defineComponent({
 
     onPlayerLLMLoading(v: boolean) {
       this.playerLLMLoading = v
-      if (v) this.playerLLMState = 'loading'
-      else if (this.playerLLMState === 'loading') {
+      if (v) {
+        this.playerLLMState = 'loading'
+        this.playerRetryInfo = null
+        this.playerRetryExhausted = false
+      } else if (this.playerLLMState === 'loading') {
         if (this.playerLLMError) this.playerLLMState = 'error'
         else if (this.playerLastSuccessText.trim().length > 0) this.playerLLMState = 'success'
         else this.playerLLMState = 'idle'
@@ -527,8 +544,11 @@ export default defineComponent({
 
     onOpponentLLMLoading(v: boolean) {
       this.opponentLLMLoading = v
-      if (v) this.opponentLLMState = 'loading'
-      else if (this.opponentLLMState === 'loading') {
+      if (v) {
+        this.opponentLLMState = 'loading'
+        this.opponentRetryInfo = null
+        this.opponentRetryExhausted = false
+      } else if (this.opponentLLMState === 'loading') {
         if (this.opponentLLMError) this.opponentLLMState = 'error'
         else if (this.opponentLastSuccessText.trim().length > 0) this.opponentLLMState = 'success'
         else this.opponentLLMState = 'idle'
@@ -539,11 +559,47 @@ export default defineComponent({
     resetLLMStateFor(source: HistoryItem['source']) {
       if (source === 'player') {
         this.playerLLMError = ''
+        this.playerRetryInfo = null
+        this.playerRetryExhausted = false
         if (this.playerLLMState !== 'loading') this.playerLLMState = 'idle'
       } else {
         this.opponentLLMError = ''
+        this.opponentRetryInfo = null
+        this.opponentRetryExhausted = false
         if (this.opponentLLMState !== 'loading') this.opponentLLMState = 'idle'
       }
+    },
+
+    onPlayerRetrying(info: { httpStatus: number; attempt: number; maxAttempts: number }) {
+      this.playerRetryInfo = info
+      this.playerLLMError = ''
+    },
+
+    onOpponentRetrying(info: { httpStatus: number; attempt: number; maxAttempts: number }) {
+      this.opponentRetryInfo = info
+      this.opponentLLMError = ''
+    },
+
+    onPlayerRetryExhausted() {
+      this.playerRetryExhausted = true
+      this.playerRetryInfo = null
+    },
+
+    onOpponentRetryExhausted() {
+      this.opponentRetryExhausted = true
+      this.opponentRetryInfo = null
+    },
+
+    retryPlayer() {
+      this.playerRetryExhausted = false
+      this.playerLLMError = ''
+      this.playerRetrySignal++
+    },
+
+    retryOpponent() {
+      this.opponentRetryExhausted = false
+      this.opponentLLMError = ''
+      this.opponentRetrySignal++
     },
 
     displaySpeechText(source: HistoryItem['source']): string {
@@ -621,7 +677,18 @@ export default defineComponent({
     <div class="coach-body">
       <div class="speech-box">
         <div class="speech-title">After Player move</div>
-        <div v-if="playerLLMError" class="error">{{ playerLLMError }}</div>
+        <div v-if="playerRetryInfo" class="retry-status">
+          <span class="loading-spinner" aria-hidden="true"></span>
+          LLM HTTP {{ playerRetryInfo.httpStatus }} (retry {{ playerRetryInfo.attempt }}/{{
+            playerRetryInfo.maxAttempts
+          }})
+        </div>
+        <div v-else-if="playerLLMError" class="error">
+          {{ playerLLMError }}
+          <button v-if="playerRetryExhausted" class="retry-btn" type="button" @click="retryPlayer">
+            Retry
+          </button>
+        </div>
         <div class="speech mono">
           <span class="speech-text" :class="{ blink: showThinking('player') }">
             {{ displaySpeechText('player') }}
@@ -635,7 +702,23 @@ export default defineComponent({
 
       <div class="speech-box">
         <div class="speech-title">After Opponent move</div>
-        <div v-if="opponentLLMError" class="error">{{ opponentLLMError }}</div>
+        <div v-if="opponentRetryInfo" class="retry-status">
+          <span class="loading-spinner" aria-hidden="true"></span>
+          LLM HTTP {{ opponentRetryInfo.httpStatus }} (retry {{ opponentRetryInfo.attempt }}/{{
+            opponentRetryInfo.maxAttempts
+          }})
+        </div>
+        <div v-else-if="opponentLLMError" class="error">
+          {{ opponentLLMError }}
+          <button
+            v-if="opponentRetryExhausted"
+            class="retry-btn"
+            type="button"
+            @click="retryOpponent"
+          >
+            Retry
+          </button>
+        </div>
         <div class="speech mono">
           <span class="speech-text" :class="{ blink: showThinking('opponent') }">
             {{ displaySpeechText('opponent') }}
@@ -689,10 +772,13 @@ export default defineComponent({
         :last-move-quality="playerLastMoveQuality"
         :last-move-eval-drop="playerLastMoveEvalDrop ?? undefined"
         :hanged-piece="hangedPieceFor(playerMeta)"
+        :retry-signal="playerRetrySignal"
         position-text="Evaluate the player's last move."
         @result="onPlayerLLMResult"
         @error="onPlayerLLMError"
         @loading="onPlayerLLMLoading"
+        @retrying="onPlayerRetrying"
+        @retry-exhausted="onPlayerRetryExhausted"
       />
 
       <LLMService
@@ -712,10 +798,13 @@ export default defineComponent({
         :last-move-quality="opponentLastMoveQuality"
         :last-move-eval-drop="opponentLastMoveEvalDrop ?? undefined"
         :hanged-piece="hangedPieceFor(opponentMeta)"
+        :retry-signal="opponentRetrySignal"
         position-text="Explain your last move: purpose, threat, and how the player should respond."
         @result="onOpponentLLMResult"
         @error="onOpponentLLMError"
         @loading="onOpponentLLMLoading"
+        @retrying="onOpponentRetrying"
+        @retry-exhausted="onOpponentRetryExhausted"
       />
 
       <details class="meta-panel">
@@ -1053,6 +1142,33 @@ export default defineComponent({
   font-size: $text-sm;
   color: $accent-error;
   margin-bottom: $space-sm;
+  display: flex;
+  align-items: center;
+  gap: $space-sm;
+  flex-wrap: wrap;
+}
+
+.retry-status {
+  font-size: $text-sm;
+  color: $accent-warning;
+  margin-bottom: $space-sm;
+  display: flex;
+  align-items: center;
+  gap: $space-sm;
+}
+
+.retry-btn {
+  @include button-base;
+  font-size: $text-xs;
+  padding: 2px $space-sm;
+  color: $accent-primary;
+  border-color: $accent-primary;
+  flex-shrink: 0;
+
+  &:hover {
+    background: $accent-primary;
+    color: $text-on-accent;
+  }
 }
 
 .status {

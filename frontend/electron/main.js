@@ -73,7 +73,7 @@ function stopBackend() {
       // Kill process group on macOS/Linux
       process.kill(-pid, 'SIGKILL');
     }
-  } catch (_) {
+  } catch {
     try {
       backendProcess.kill('SIGKILL');
     } catch {}

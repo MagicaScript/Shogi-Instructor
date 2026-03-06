@@ -3,7 +3,13 @@ import { defineComponent } from 'vue'
 import type { EngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import { isEngineAnalysisPayload } from '@/schemes/engineAnalysis'
 import { settingsStore, type CoachProfile, type SettingsState } from '@/schemes/settings'
-import { makeContextFromAnalysis, requestLLMCoach, type LLMCoachResponse } from '@/logic/llmService'
+import {
+  makeContextFromAnalysis,
+  requestLLMCoach,
+  isRetryableError,
+  LLMHttpError,
+  type LLMCoachResponse,
+} from '@/logic/llmService'
 import { isNonEmptyString } from '@/utils/typeGuards'
 import type { MoveQuality } from '@/schemes/moveHistory'
 import { isMoveQuality } from '@/schemes/moveHistory'
@@ -31,12 +37,23 @@ type Props = {
   hangedPiece?: string
 }
 
+type RetryingInfo = { httpStatus: number; attempt: number; maxAttempts: number }
+type RetryExhaustedInfo = { httpStatus: number; message: string }
+
+const MAX_RETRIES = 3
+const RETRY_DELAYS = [1000, 2000, 4000]
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 type Data = {
   loading: boolean
   lastError: string
   lastResult: LLMCoachResponse | null
   unsub: null | (() => void)
   state: SettingsState
+  requestSeq: number
 }
 
 function mergeCoach(base: CoachProfile | null, p: Props): CoachProfile | null {
@@ -83,12 +100,15 @@ export default defineComponent({
     lastMoveEvalDrop: { type: Number, default: undefined },
     /** Single top hanging piece in "R@5e" format. */
     hangedPiece: { type: String, default: '' },
+    retrySignal: { type: Number, default: 0 },
   },
 
   emits: {
     result: (v: LLMCoachResponse) => typeof v === 'object' && v !== null,
     error: (msg: string) => typeof msg === 'string',
     loading: (v: boolean) => typeof v === 'boolean',
+    retrying: (info: RetryingInfo) => typeof info === 'object' && info !== null,
+    'retry-exhausted': (info: RetryExhaustedInfo) => typeof info === 'object' && info !== null,
   },
 
   data(): Data {
@@ -98,6 +118,7 @@ export default defineComponent({
       lastResult: null,
       unsub: null,
       state: settingsStore.getState(),
+      requestSeq: 0,
     }
   },
 
@@ -118,6 +139,9 @@ export default defineComponent({
       },
     },
     coachId() {
+      void this.tryRequest()
+    },
+    retrySignal() {
       void this.tryRequest()
     },
     state: {
@@ -145,6 +169,8 @@ export default defineComponent({
 
   methods: {
     async tryRequest() {
+      const seq = ++this.requestSeq
+
       const analysis = this.safeAnalysis
       if (!analysis) return
       if (!analysis.bestmove) return
@@ -186,18 +212,39 @@ export default defineComponent({
       this.lastError = ''
       this.$emit('loading', true)
 
-      try {
-        const out = await requestLLMCoach(ctx)
-        this.lastResult = out
-        this.$emit('result', out)
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e)
-        this.lastError = msg
-        this.$emit('error', msg)
-      } finally {
-        this.loading = false
-        this.$emit('loading', false)
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        if (seq !== this.requestSeq) return
+
+        try {
+          const out = await requestLLMCoach(ctx)
+          if (seq !== this.requestSeq) return
+          this.lastResult = out
+          this.$emit('result', out)
+          break
+        } catch (e: unknown) {
+          if (seq !== this.requestSeq) return
+
+          const msg = e instanceof Error ? e.message : String(e)
+          const status = e instanceof LLMHttpError ? e.status : 0
+
+          if (isRetryableError(e) && attempt < MAX_RETRIES) {
+            this.$emit('retrying', { httpStatus: status, attempt, maxAttempts: MAX_RETRIES })
+            await sleep(RETRY_DELAYS[attempt - 1]!)
+            continue
+          }
+
+          if (isRetryableError(e)) {
+            this.$emit('retry-exhausted', { httpStatus: status, message: msg })
+          }
+          this.lastError = msg
+          this.$emit('error', msg)
+          break
+        }
       }
+
+      if (seq !== this.requestSeq) return
+      this.loading = false
+      this.$emit('loading', false)
     },
   },
 })

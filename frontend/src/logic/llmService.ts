@@ -45,6 +45,21 @@ export type LLMBoardContext = {
 
 const PROXY_BASE_URL = 'http://127.0.0.1:3080'
 
+const RETRYABLE_STATUS_CODES = new Set([408, 409, 425, 429, 500, 502, 503, 504])
+
+export class LLMHttpError extends Error {
+  readonly status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'LLMHttpError'
+    this.status = status
+  }
+}
+
+export function isRetryableError(e: unknown): e is LLMHttpError {
+  return e instanceof LLMHttpError && RETRYABLE_STATUS_CODES.has(e.status)
+}
+
 function isLLMEmotion(v: unknown): v is LLMEmotion {
   return v === 'happy' || v === 'neutral' || v === 'concerned' || v === 'excited'
 }
@@ -572,7 +587,7 @@ export async function requestLLMCoach(ctx: LLMCoachContext): Promise<LLMCoachRes
     if (isOpenAICompletionResponse(json) && json.error && typeof json.error.message === 'string') {
       msg = json.error.message
     }
-    throw new Error(msg)
+    throw new LLMHttpError(res.status, msg)
   }
 
   if (!isOpenAICompletionResponse(json)) throw new Error('Invalid LLM response.')

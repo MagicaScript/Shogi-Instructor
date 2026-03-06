@@ -28,6 +28,8 @@ coverage
 *.sln
 *.sw?
 
+.cursor/staged.diff
+
 *.tsbuildinfo
 
 .eslintcache

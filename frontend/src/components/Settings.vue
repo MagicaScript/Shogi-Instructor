@@ -319,7 +319,7 @@ export default defineComponent({
           <input
             class="input mono"
             :value="state.llmModelName"
-            placeholder="gemini-3-flash-preview"
+            placeholder="gemini-3.1-flash-lite-preview"
             @change="onChangeModelName(($event.target as HTMLInputElement).value)"
           />
         </div>
